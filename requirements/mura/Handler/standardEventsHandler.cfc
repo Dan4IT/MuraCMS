@@ -159,8 +159,8 @@
 <cffunction name="standardSetLocaleHandler" output="false" returnType="any">
 	<cfargument name="event" required="true">
 	<cfparam name="session.siteID" default="">
-	<cfset setLocale(application.settingsManager.getSite(arguments.event.getValue('siteid')).getJavaLocale()) />
-	<cfif session.siteid neq arguments.event.getValue('siteid') or not structKeyExists(session,"locale")>
+	<cfset setLocale(application.settingsManager.getSite(arguments.event.getValue('siteid')).getJavaLocale())>
+	<cfif (not request.mura404 and arguments.event.getValue('contentBean').exists() and session.siteid neq arguments.event.getValue('siteid')) or not structKeyExists(session,"locale")>
 		<!---These are use for admin purposes--->
 		<cfset session.siteID=arguments.event.getValue('siteid')>
 		<cfset session.userFilesPath = "#application.configBean.getAssetPath()#/#arguments.event.getValue('siteid')#/assets/">
@@ -230,18 +230,20 @@
 		<cfset arguments.event.setValue('contentBean',contentArray[1])>
 	</cfif>
 	
-	<cfset arguments.event.getValidator("standardWrongFilename").validate(arguments.event)>
-
-	<cfset arguments.event.getValidator("standard404").validate(arguments.event)>
+	<cfif arguments.event.getValue('contentBean').getType() neq 'Variation'>
+		<cfset arguments.event.getValidator("standardWrongFilename").validate(arguments.event)>
+		<cfset arguments.event.getValidator("standard404").validate(arguments.event)>
 	
-	<cfif application.settingsManager.getSite(arguments.event.getValue('siteid')).getUseSSL()>
-		<cfset arguments.event.setValue('forcessl', true) />
-	<cfelseif arguments.event.getValue('contentBean').getForceSSL()>
-		<cfset arguments.event.setValue('forceSSL',arguments.event.getValue('contentBean').getForceSSL())/>
+	
+		<cfif application.settingsManager.getSite(arguments.event.getValue('siteid')).getUseSSL()>
+			<cfset arguments.event.setValue('forcessl', true) />
+		<cfelseif arguments.event.getValue('contentBean').getForceSSL()>
+			<cfset arguments.event.setValue('forceSSL',arguments.event.getValue('contentBean').getForceSSL())/>
+		</cfif>
 	</cfif>
 
 	<cfif not arguments.event.valueExists('crumbdata')>
-		<cfset arguments.event.setValue('crumbdata',application.contentGateway.getCrumbList(arguments.event.getValue('contentBean').getcontentid(),arguments.event.getContentBean().getSiteID(),true,arguments.event.getValue('contentBean').getPath())) />
+		<cfset arguments.event.setValue('crumbdata',arguments.event.getValue('contentBean').getCrumbArray(setInheritance=true)) />
 	</cfif>
 
 	<cfset renderer.injectMethod('crumbdata',arguments.event.getValue("crumbdata"))>
@@ -338,15 +340,11 @@
 	<cfargument name="$" required="true">
 	
 	<cfif request.returnFormat eq 'JSON'>
-		<cfif application.utility.isHTTPS()>
-			<cfset request.muraJSONRedirectURL="http://#arguments.$.siteConfig('domain')##arguments.$.siteConfig('serverPort')##arguments.$.siteConfig('context')##arguments.$.getCurrentURL(complete=false,filterVars=false)#">
-		<cfelse>
+		<cfif not application.utility.isHTTPS()>
 			<cfset request.muraJSONRedirectURL="https://#arguments.$.siteConfig('domain')##arguments.$.siteConfig('serverPort')##arguments.$.siteConfig('context')##arguments.$.getCurrentURL(complete=false,filterVars=false)#">
 		</cfif>
 	<cfelse>
-		<cfif application.utility.isHTTPS()>
-			<cflocation addtoken="no" url="http://#arguments.$.siteConfig('domain')##arguments.$.siteConfig('serverPort')##arguments.$.siteConfig('context')##arguments.$.getCurrentURL(complete=false,filterVars=false)#">
-		<cfelse>
+		<cfif not application.utility.isHTTPS()>
 			<cflocation addtoken="no" url="https://#arguments.$.siteConfig('domain')##arguments.$.siteConfig('serverPort')##arguments.$.siteConfig('context')##arguments.$.getCurrentURL(complete=false,filterVars=false)#">
 		</cfif>
 	</cfif>
@@ -424,6 +422,7 @@
 	</cfif>
 
 	<cfif arguments.event.getValue("contentBean").getIsNew()>
+		<cfset request.mura404=true>
 		<cfset var local.filename=arguments.event.getValue('currentFilenameAdjusted')>
 
 		<cfloop condition="listLen(local.filename,'/')">		
@@ -471,8 +470,7 @@
 		<cfset var renderer=arguments.$.getContentRenderer()>
 		<cfif isDefined('renderer.noIndex')>
 			<cfset renderer.noIndex()>
-		</cfif>
-		
+		</cfif>	
 	</cfif>
 	
 </cffunction>
@@ -500,7 +498,14 @@
 			<cfif fileExists(expandPath("/#application.configBean.getWebRootMap()#/#arguments.event.getValue('siteid')#/includes/loginHandler.cfc"))>
 				<cfset createObject("component","#application.configBean.getWebRootMap()#.#arguments.event.getValue('siteid')#.includes.loginHandler").init().handleLogin(arguments.event.getAllValues())>
 			<cfelse>
-				<cfset application.loginManager.login(arguments.event.getAllValues(),'') />
+				<cfset var loginManager=arguments.$.getBean('loginManager')>
+				<cfif isBoolean(arguments.$.event('attemptChallenge')) and arguments.$.event('attemptChallenge')>
+					<cfif loginManager.handleChallengeAttempt(arguments.$)>
+						<cfset loginManager.completedChallenge(arguments.$)>
+					</cfif>
+				<cfelse>
+					<cfset loginManager.login(arguments.$.event().getAllValues(),'')>	
+				</cfif>
 			</cfif>
 		</cfcase>
 		
@@ -729,7 +734,7 @@
 
 	<cfif request.returnFormat eq 'JSON'>
 		<cfset var apiUtility=$.siteConfig().getApi('json','v1')>
-		<cfset $.event('__MuraResponse__',apiUtility.getSerializer().serialize({data={redirect=$.siteConfig().getResourcePath(complete=true) & '/index.cfm/_api/render/file/?fileid=' & $.content('fileid')}}))>
+		<cfset $.event('__MuraResponse__',apiUtility.getSerializer().serialize({'apiversion'=apiUtility.getApiVersion(),'method'='findOne','params'=apiUtility.getParamsWithOutMethod(form),data={redirect=$.siteConfig().getResourcePath(complete=true) & '/index.cfm/_api/render/file/?fileid=' & $.content('fileid')}}))>
 	<cfelse>
 		<cfset $.getContentRenderer().renderFile($.content('fileid'),$.event('method'),$.event('size')) />
 	</cfif>
@@ -746,7 +751,7 @@
 
 	<cfif request.returnFormat eq 'JSON'>
 		<cfset var apiUtility=$.siteConfig().getApi('json','v1')>
-		<cfset $.event('__MuraResponse__',apiUtility.getSerializer().serialize({data={redirect=request.muraJSONRedirectURL}}))>
+		<cfset $.event('__MuraResponse__',apiUtility.getSerializer().serialize({'apiversion'=apiUtility.getApiVersion(),'method'='findOne','params'=apiUtility.getParamsWithOutMethod(form),data={redirect=thelink}}))>
 	<cfelse>
 		<cflocation url="#theLink#" addtoken="false" statuscode="301">
 	</cfif>
@@ -757,28 +762,65 @@
 	<cfargument name="$">
 	<cfscript>
 		try{
-			var result=$.content().getAllValues();
-			var renderer=$.getContentRenderer();
+
+			if($.content('type')=='Variation'){
+				$.content('isnew',0);
+			}
+
 			var apiUtility=$.siteConfig().getApi('json','v1');
+			var result=structCopy($.content().getAllValues());
+			var renderer=$.getContentRenderer();
+
+			$.event('response',result);
+
+			if(result.type != 'Variation'){
+
+				request.cffpJS=true;
+
+				renderer.injectMethod('showInlineEditor',false);
+				renderer.injectMethod('showAdminToolBar',false);
+				renderer.injectMethod('showMemberToolBar',false);
+				renderer.injectMethod('showEditableObjects',false);
+
+				result.body=apiUtility.applyRemoteFormat($.dspBody(body=$.content('body'),crumblist=false,renderKids=true,showMetaImage=false));
 			
-			renderer.injectMethod('showInlineEditor',false);
-			renderer.injectMethod('showAdminToolBar',false);
-			renderer.injectMethod('showMemberToolBar',false);
-			renderer.injectMethod('showEditableObjects',false);
+				result.displayRegions={};
 
-			request.cffpJS=true;
-				
-			result.body=apiUtility.applyRemoteFormat($.dspBody(body=$.content('body'),crumblist=false,renderKids=true));
-		
-			result.displayRegions={};
+				for(var r =1;r<=ListLen($.siteConfig('columnNames'),'^');r++){
+					var regionName='#replace(listGetAt($.siteConfig('columnNames'),r,'^'),' ','','all')#';
+					var regionData=$.dspObjects(columnid=r,returnFormat='array');
 
-			for(var r =1;r<=ListLen($.siteConfig('columnNames'),'^');r++){
-				result.displayRegions['#replace(listGetAt($.siteConfig('columnNames'),r,'^'),' ','','all')#']=$.dspObjects(columnid=r);
+					for(var d=1;d<=arrayLen(regionData.items);d++){
+					
+						if(isSimpleValue(regionData.items[d])){
+							regionData.items[d]={html=apiUtility.applyRemoteFormat(regionData.items[d])};
+						}
+					}
+
+					result.displayRegions[regionName]={header=regionData.header,footer=regionData.footer,items=regionData.items};
+				}
 			}
 
-			for(r in result.displayRegions){
-				result.displayRegions[r]=apiUtility.applyRemoteFormat(result.displayRegions[r]);
-			}
+			result.config={
+				loginURL=$.siteConfig('LoginURL'),
+				siteid=$.event('siteID'),
+				contentid=$.content('contentid'),
+				contenthistid=$.content('contenthistid'),
+				siteID=$.event('siteID'),
+				context=$.globalConfig('context'),
+				nocache=$.event('nocache'),
+				assetpath=$.siteConfig().getResourcePath(complete=1) & $.siteConfig().getAssetPath(),
+				requirementspath=$.siteConfig().getRequirementsPath(complete=1),
+				adminpath=$.globalConfig('adminpath'),
+				themepath=$.siteConfig().getResourcePath(complete=1) & $.siteConfig().getThemeAssetPath(),
+				rb=lcase(listFirst($.siteConfig('JavaLocale'),"_")),
+				reCAPTCHALanguage=$.siteConfig('reCAPTCHALanguage'),
+				preloaderMarkup=esapiEncode('javascript',renderer.preloaderMarkup),
+				mobileformat=esapiEncode('javascript',$.event('muraMobileRequest')),
+				adminpreview=lcase(structKeyExists(url,'muraadminpreview')),
+				windowdocumentdomain=$.globalConfig('WindowDocumentDomain'),
+				perm=$.event('r').perm
+			};
 
 			result.HTMLHeadQueue=$.renderHTMLQueue('head');
 			result.HTMLFootQueue=$.renderHTMLQueue('foot');
@@ -786,10 +828,24 @@
 			result.id=result.contentid;
 			result.links=apiUtility.getLinks($.content());
 			result.images=apiUtility.setImageUrls($.content(),$);
-			//if(!request.muraApiRequest){
-				getpagecontext().getresponse().setcontenttype('application/json; charset=utf-8');
-			//}
-			$.event('__MuraResponse__',apiUtility.getSerializer().serialize({data=result}));
+		
+			getpagecontext().getresponse().setcontenttype('application/json; charset=utf-8');
+
+			$.announceEvent('onapiresponse');
+			$.announceEvent('on#result.type#apiresponse');
+			$.announceEvent('on#result.type##result.subtype#apiresponse');
+
+			structDelete(result,'addObjects');
+			structDelete(result,'removeObjects');
+			structDelete(result,'frommuracache');
+			structDelete(result,'errors');
+			structDelete(result,'instanceid');
+			structDelete(result,'primaryKey');
+			structDelete(result,'extenddatatable');
+			structDelete(result,'extenddata');
+			structDelete(result,'extendAutoComplete');
+
+			$.event('__MuraResponse__',apiUtility.getSerializer().serialize({'apiversion'=apiUtility.getApiVersion(),'method'='findOne','params'=apiUtility.getParamsWithOutMethod(form),data=result}));
 
 		} catch (any e){
 			$.event('__MuraResponse__',apiUtility.getSerializer().serialize({error=e.stacktrace}));

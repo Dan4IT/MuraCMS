@@ -54,8 +54,9 @@
 	may, if you choose, apply this exception to your own modified versions of 
 	Mura CMS.
 --->
-<cfset variables.strField = "" />
 <cfsilent>
+<cfset variables.strField = "" />
+<cfparam name="arguments.prefix" default="">
 <cfsavecontent variable="variables.strField">
 	<cfoutput>
 <cfif request.fieldsetopen eq true></fieldset><cfset request.fieldsetopen = false /></cfif>
@@ -65,7 +66,4 @@
 </cfsavecontent>
 <!--- note that fieldsets are open --->
 <cfset request.fieldsetopen = true />
-</cfsilent>
-<cfoutput>
-#variables.strField#
-</cfoutput>
+</cfsilent><cfoutput>#variables.strField#</cfoutput>

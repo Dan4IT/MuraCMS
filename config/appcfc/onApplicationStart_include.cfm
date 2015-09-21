@@ -176,8 +176,8 @@ version 2 without this exception.  You may, if you choose, apply this exception 
 				transientPattern = "(Iterator|Bean|MuraScope|Event|dbUtility|extendObject)$" 
 				});
 
-		variables.serviceFactory.addBean("tempDir",application.configBean.getTempDir());
 		variables.serviceFactory.addBean("useFileMode",application.configBean.getUseFileMode());
+		variables.serviceFactory.addBean("tempDir",application.configBean.getTempDir());
 		variables.serviceFactory.addBean("configBean",application.configBean);
 		variables.serviceFactory.addBean("data","");
 		variables.serviceFactory.addBean("settings",{});
@@ -262,6 +262,7 @@ version 2 without this exception.  You may, if you choose, apply this exception 
 		variables.serviceFactory.addAlias("commenter","contentCommenterBean");
 		variables.serviceFactory.addAlias("changesetCategoryAssignment","changesetCategoryAssignmentBean");
 		variables.serviceFactory.addAlias("changesetTagAssignment","changesetTagAssignmentBean");
+		variables.serviceFactory.addAlias("userDevice","userDeviceBean");
 		application.serviceFactory=variables.serviceFactory;
 	</cfscript>
 
@@ -315,6 +316,7 @@ version 2 without this exception.  You may, if you choose, apply this exception 
 			variables.serviceFactory.getBean('razunaSettings');
 			variables.serviceFactory.getBean('contentFilenameArchive');
 			variables.serviceFactory.getBean('commenter');
+			variables.serviceFactory.getBean('userDevice');
 		</cfscript>
 	</cfif>
 		
@@ -436,6 +438,10 @@ version 2 without this exception.  You may, if you choose, apply this exception 
 		<cfif not fileExists(variables.basedir & "/web.config")>	
 			<cfset application.serviceFactory.getBean("fileWriter").copyFile(source="#variables.basedir#/config/templates/web.config.template.cfm", destination="#variables.basedir#/web.config")>
 		</cfif>
+
+		<cfif not fileExists(variables.basedir & "/requirements/cfformprotect/cffp.ini.cfm")>	
+			<cfset application.serviceFactory.getBean("fileWriter").copyFile(source="#variables.basedir#/config/templates/cffp.ini.template.cfm", destination="#variables.basedir#/requirements/cfformprotect/cffp.ini.cfm")>
+		</cfif>
 	</cfif>
 		
 	<cfif not structKeyExists(application,"plugins")>
@@ -480,7 +486,7 @@ version 2 without this exception.  You may, if you choose, apply this exception 
 				<cfset variables.themeConfig=fileRead(variables.themedir & "/" & variables.themeConfig)>
 			</cfif>
 
-			<cfif isXml(variables.themeConfig)>
+			<cfif IsValid('xml', variables.themeConfig)>
 				<cfset variables.themeConfig=xmlParse(variables.themeConfig)>
 				<cfset application.configBean.getClassExtensionManager().loadConfigXML(variables.themeConfig,variables.rsSites.siteid)>
 			</cfif>

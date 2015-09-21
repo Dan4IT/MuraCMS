@@ -81,7 +81,7 @@ version 2 without this exception.  You may, if you choose, apply this exception 
 			
 			<cfif NOT cacheFactory.has( key )>			
 				<cfset crumbdata=buildCrumblist(contentid=arguments.contentID,siteid=arguments.siteID,path=arguments.path) />	
-				<cfif arrayLen(crumbdata) lt 50>
+				<cfif arrayLen(crumbdata) and arrayLen(crumbdata) lt 50>
 					<cfset crumbdata=cacheFactory.get( key, crumbdata ) />
 				</cfif>
 			<cfelse>
@@ -90,14 +90,14 @@ version 2 without this exception.  You may, if you choose, apply this exception 
 					
 					<cfif not isArray(crumbdata)>
 						<cfset crumbdata=buildCrumblist(contentid=arguments.contentID,siteid=arguments.siteID,path=arguments.path) />
-						<cfif arrayLen(crumbdata) lt 50>
+						<cfif arrayLen(crumbdata) and arrayLen(crumbdata) lt 50>
 							<cfset crumbdata=cacheFactory.get( key, crumbdata ) />
 						</cfif>
 					</cfif>
 
 					<cfcatch>
 						<cfset crumbdata=buildCrumblist(contentid=arguments.contentID,siteid=arguments.siteID,path=arguments.path) />
-						<cfif arrayLen(crumbdata) lt 50>
+						<cfif arrayLen(crumbdata) and arrayLen(crumbdata) lt 50>
 							<cfset crumbdata=cacheFactory.get( key, crumbdata ) />
 						</cfif>
 					</cfcatch>
@@ -107,7 +107,7 @@ version 2 without this exception.  You may, if you choose, apply this exception 
 
 		<cfif not isDefined('crumbdata') or isSimpleValue(crumbdata) >
 			<cfset crumbdata=buildCrumblist(contentid=arguments.contentID,siteid=arguments.siteID,path=arguments.path)/>
-			<cfif site.getCache() and arrayLen(crumbdata) lt 50>
+			<cfif site.getCache() and arrayLen(crumbdata) and arrayLen(crumbdata) lt 50>
 				<cfset cacheFactory.get( key, crumbdata ) />
 			</cfif>
 		</cfif>
@@ -154,13 +154,22 @@ version 2 without this exception.  You may, if you choose, apply this exception 
 			and tcontent.contentid=<cfqueryparam cfsqltype="cf_sql_varchar" value="#ID#"/> 
 			and tcontent.siteid= <cfqueryparam cfsqltype="cf_sql_varchar" value="#arguments.siteID#"/>
 			</cfquery>
+
+
+			<cfif not rsCrumbData.recordcount>
+				<cfbreak>
+			</cfif>
 			
 			<cfset crumb=structNew() />
 			<cfset crumb.type=rsCrumbData.type />
 			<cfset crumb.subtype=rsCrumbData.subtype />
 			<cfset crumb.filename=rsCrumbData.filename />
 			<cfset crumb.title=rsCrumbData.title />
-			<cfset crumb.menutitle=rsCrumbData.menutitle />
+			<cfif len(rsCrumbData.menutitle)>
+				<cfset crumb.menutitle=rsCrumbData.menutitle />
+			<cfelse>
+				<cfset crumb.menutitle=rsCrumbData.title />
+			</cfif>
 			<cfset crumb.urltitle=rsCrumbData.urltitle />
 			<cfset crumb.target=rsCrumbData.target />
 			<cfset crumb.contentid=rsCrumbData.contentid />
@@ -1269,7 +1278,7 @@ version 2 without this exception.  You may, if you choose, apply this exception 
 		</cfif>
 		
 		<cfquery attributeCollection="#variables.configBean.getReadOnlyQRYAttrs(name='rsNest')#">
-		SELECT tcontent.ContentHistID, tcontent.ContentID, tcontent.Approved, tcontent.filename, tcontent.Active, tcontent.Type, tcontent.subtype, tcontent.OrderNo, tcontent.ParentID, 
+		SELECT tcontent.ContentHistID, tcontent.ContentID, tcontent.moduleid, tcontent.Approved, tcontent.filename, tcontent.Active, tcontent.Type, tcontent.subtype, tcontent.OrderNo, tcontent.ParentID, 
 		tcontent.Title, tcontent.menuTitle, tcontent.lastUpdate, tcontent.lastUpdateBy, tcontent.lastUpdateByID, tcontent.Display, tcontent.DisplayStart, 
 		tcontent.DisplayStop,  tcontent.isnav, tcontent.restricted, 
 		<cfif arguments.aggregation>
@@ -1313,18 +1322,20 @@ version 2 without this exception.  You may, if you choose, apply this exception 
 		and   (tcontent.Type ='Page'
 				or tcontent.Type = 'Component' 
 				or tcontent.Type = 'Link'
+				or tcontent.Type = 'Variation'
 				or tcontent.Type = 'File' 
 				or tcontent.Type = 'Folder'
 				or tcontent.Type = 'Calendar'
 				or tcontent.Type = 'Form'
-				or tcontent.Type = 'Gallery') 
+				or tcontent.Type = 'Gallery'
+				or tcontent.Type = 'Module') 
 		
 		<cfif arguments.searchString neq "">
 			and (UPPER(tcontent.menuTitle) like UPPER(<cfqueryparam cfsqltype="cf_sql_varchar" value="%#arguments.searchString#%"/>))
 		</cfif>	
 	
 		<cfif arguments.aggregation>
-			group by tcontent.ContentHistID, tcontent.ContentID, tcontent.Approved, tcontent.filename, tcontent.Active, tcontent.Type, tcontent.subtype, tcontent.OrderNo, tcontent.ParentID, 
+			group by tcontent.ContentHistID, tcontent.ContentID, tcontent.moduleid, tcontent.Approved, tcontent.filename, tcontent.Active, tcontent.Type, tcontent.subtype, tcontent.OrderNo, tcontent.ParentID, 
 			tcontent.Title, tcontent.menuTitle, tcontent.lastUpdate, tcontent.lastUpdateBy, tcontent.lastUpdateByID, tcontent.Display, tcontent.DisplayStart, 
 			tcontent.DisplayStop,  tcontent.isnav, tcontent.restricted,tcontent.isfeature,tcontent.inheritObjects,
 			tcontent.target,tcontent.targetParams,tcontent.islocked,tcontent.sortBy,tcontent.sortDirection,tcontent.releaseDate,
@@ -1439,7 +1450,7 @@ version 2 without this exception.  You may, if you choose, apply this exception 
 		<cfset var rsTop = "">
 		
 		<cfquery attributeCollection="#variables.configBean.getReadOnlyQRYAttrs(name='rsTop')#">
-		SELECT tcontent.ContentHistID, tcontent.ContentID, tcontent.Approved, tcontent.filename, tcontent.Active, tcontent.Type, tcontent.subtype, tcontent.OrderNo, tcontent.ParentID, 
+		SELECT tcontent.ContentHistID, tcontent.ContentID, tcontent.moduleid, tcontent.Approved, tcontent.filename, tcontent.Active, tcontent.Type, tcontent.subtype, tcontent.OrderNo, tcontent.ParentID, 
 		tcontent.Title, tcontent.menuTitle, tcontent.lastUpdate, tcontent.lastUpdateBy, tcontent.lastUpdateByID, tcontent.Display, tcontent.DisplayStart, 
 		tcontent.DisplayStop,  tcontent.isnav, tcontent.restricted,tcontent.isFeature,tcontent.inheritObjects,tcontent.target,tcontent.targetParams,
 		tcontent.isLocked,tcontent.sortBy,tcontent.sortDirection,tcontent.releaseDate,tfiles.fileEXT, tcontent.featurestart, tcontent.featurestop,tcontent.template,tcontent.childTemplate,
@@ -2079,7 +2090,7 @@ version 2 without this exception.  You may, if you choose, apply this exception 
 <cffunction name="getRelatedContent" access="public" output="false" returntype="query">
 	<cfargument name="siteID" type="String">
 	<cfargument name="contentHistID" type="String">
-	<cfargument name="liveOnly" type="boolean" required="yes" default="false">
+	<cfargument name="liveOnly" type="boolean" required="yes" default="true">
 	<cfargument name="today" type="date" required="yes" default="#now()#" />
 	<cfargument name="sortBy" type="string" default="orderno" >
 	<cfargument name="sortDirection" type="string" default="asc" >
@@ -2429,7 +2440,7 @@ version 2 without this exception.  You may, if you choose, apply this exception 
 	<cfset var rsObjects=""/>
 	
 	<cfquery attributeCollection="#variables.configBean.getReadOnlyQRYAttrs(name='rsObjects')#">
-	select tcontentobjects.object,tcontentobjects.objectid, tcontentobjects.orderno, tcontentobjects.params, tplugindisplayobjects.configuratorInit from tcontentobjects 
+	select tcontentobjects.object,tcontentobjects.name,tcontentobjects.objectid, tcontentobjects.orderno, tcontentobjects.params, tplugindisplayobjects.configuratorInit from tcontentobjects 
 	inner join tcontent On(
 	tcontentobjects.contenthistid=tcontent.contenthistid
 	and tcontentobjects.siteid=tcontent.siteid) 
@@ -2452,7 +2463,7 @@ version 2 without this exception.  You may, if you choose, apply this exception 
 	
 	<cfset var rsObjectInheritence=""/>
 	<cfquery attributeCollection="#variables.configBean.getReadOnlyQRYAttrs(name='rsObjectInheritence')#">
-	select tcontentobjects.object, tcontentobjects.objectid, tcontentobjects.orderno, tcontentobjects.params, tplugindisplayobjects.configuratorInit from tcontentobjects
+	select tcontentobjects.object, tcontentobjects.name, tcontentobjects.objectid, tcontentobjects.orderno, tcontentobjects.params, tplugindisplayobjects.configuratorInit from tcontentobjects
 	left join tplugindisplayobjects on (tcontentobjects.object='plugin' 
 										and tcontentobjects.objectID=tplugindisplayobjects.objectID)  
 	where 
@@ -2611,25 +2622,22 @@ version 2 without this exception.  You may, if you choose, apply this exception 
 <cfargument name="siteID">
 	<cfset var previewData="">
  	<cfoutput>
-		<cfif request.muraChangesetPreview>
-			<cfset previewData=getCurrentUser().getValue("ChangesetPreviewData")>
-			<cfif isDefined('previewData.contentIDList') and len(previewData.contentIDList)>
-			and (
-					(#arguments.table#.active = 1
-					and #arguments.table#.Approved = 1
-					and #arguments.table#.contentID not in (#previewData.contentIDList#)	
-					)
-					
-					or 
-					
-					(
-					#arguments.table#.contentHistID in (#previewData.contentHistIDList#)
-					)			
-				)
-			<cfelse>
-				and #arguments.table#.active = 1
+ 		<cfif isDefined('session.mura')>
+ 			<cfset previewData=getCurrentUser().getValue("ChangesetPreviewData")>
+ 		</cfif>
+		<cfif isStruct(previewData) and previewData.siteID eq arguments.siteid and isDefined('previewData.contentIDList') and len(previewData.contentIDList)>
+		and (
+				(#arguments.table#.active = 1
 				and #arguments.table#.Approved = 1
-			</cfif>	
+				and #arguments.table#.contentID not in (#previewData.contentIDList#)	
+				)
+				
+				or 
+				
+				(
+				#arguments.table#.contentHistID in (#previewData.contentHistIDList#)
+				)			
+			)
 		<cfelse>
 			and #arguments.table#.active = 1
 			and #arguments.table#.Approved = 1

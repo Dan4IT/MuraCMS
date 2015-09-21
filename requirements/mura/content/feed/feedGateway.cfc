@@ -190,7 +190,7 @@ version 2 without this exception.  You may, if you choose, apply this exception 
 	</cfloop>
 
 	<cfprocessingdirective suppressWhitespace="true">
-		<cfquery attributeCollection="#variables.configBean.getReadOnlyQRYAttrs(name='rsFeed',blockFactor=blockFactor)#">
+		<cfquery attributeCollection="#variables.configBean.getReadOnlyQRYAttrs(name='rsFeed',blockFactor=blockFactor,cachedWithin=arguments.feedBean.getCachedWithin())#">
 			<cfif not arguments.countOnly and dbType eq "oracle" and arguments.feedBean.getMaxItems()>SELECT * FROM (</cfif>
 			SELECT 
 				<cfif not arguments.countOnly and dbtype eq "mssql" and arguments.feedBean.getMaxItems()>top #arguments.feedBean.getMaxItems()#</cfif> 
@@ -301,7 +301,7 @@ version 2 without this exception.  You may, if you choose, apply this exception 
 									AND TKids.searchExclude = 0
 								</cfif>
 
-								<cfif arguments.feedBean.getShowNavOnly() and not listFindNoCase('Form,Component',arguments.feedBean.getType())>
+								<cfif arguments.feedBean.getShowNavOnly() and not listFindNoCase('Form,Component,Variation',arguments.feedBean.getType())>
 									AND TKids.isNav = 1
 								</cfif>
 
@@ -311,6 +311,10 @@ version 2 without this exception.  You may, if you choose, apply this exception 
 									AND tcontent.moduleid = '00000000000000000000000000000000003'
 								<cfelseif arguments.feedBean.getType() eq "Form">
 									AND tcontent.moduleid = '00000000000000000000000000000000004'
+								<cfelseif arguments.feedBean.getType() eq "Variation">
+									AND tcontent.moduleid = '00000000000000000000000000000000099'
+								<cfelseif arguments.feedBean.getType() eq "*">
+									AND tcontent.moduleid in ('00000000000000000000000000000000003','00000000000000000000000000000000004','00000000000000000000000000000000099','00000000000000000000000000000000000')
 								<cfelse>
 									AND tcontent.moduleid = '00000000000000000000000000000000000'
 								</cfif>
@@ -340,6 +344,12 @@ version 2 without this exception.  You may, if you choose, apply this exception 
 												<cfset openGrouping=true />
 											<cfelseif listFindNoCase("andOpenGrouping,and (",param.getRelationship())>
 												<cfif not openGrouping>and</cfif> (
+												<cfset openGrouping=true />
+											<cfelseif listFindNoCase("and not (",param.getRelationship())>
+												<cfif not openGrouping>and</cfif> not (
+												<cfset openGrouping=true />
+											<cfelseif listFindNoCase("or not (",param.getRelationship())>
+												<cfif not openGrouping>or</cfif> not (
 												<cfset openGrouping=true />
 											<cfelseif listFindNoCase("closeGrouping,)",param.getRelationship())>
 												)
@@ -619,6 +629,10 @@ version 2 without this exception.  You may, if you choose, apply this exception 
 					AND tcontent.moduleid = '00000000000000000000000000000000003'
 				<cfelseif arguments.feedBean.getType() eq "Form">
 					AND tcontent.moduleid = '00000000000000000000000000000000004'
+				<cfelseif arguments.feedBean.getType() eq "Variation">
+					AND tcontent.moduleid = '00000000000000000000000000000000099'
+				<cfelseif arguments.feedBean.getType() eq "*">
+					AND tcontent.moduleid in ('00000000000000000000000000000000003','00000000000000000000000000000000004','00000000000000000000000000000000099','00000000000000000000000000000000000')
 				<cfelse>
 					AND tcontent.moduleid = '00000000000000000000000000000000000'
 				</cfif>
@@ -659,6 +673,12 @@ version 2 without this exception.  You may, if you choose, apply this exception 
 								<cfset openGrouping=true />
 							<cfelseif listFindNoCase("andOpenGrouping,and (",param.getRelationship())>
 								<cfif not openGrouping>and</cfif> (
+								<cfset openGrouping=true />
+							<cfelseif listFindNoCase("and not (",param.getRelationship())>
+								<cfif not openGrouping>and</cfif> not (
+								<cfset openGrouping=true />
+							<cfelseif listFindNoCase("or not (",param.getRelationship())>
+								<cfif not openGrouping>or</cfif> not (
 								<cfset openGrouping=true />
 							<cfelseif listFindNoCase("closeGrouping,)",param.getRelationship())>
 								)
@@ -998,8 +1018,7 @@ version 2 without this exception.  You may, if you choose, apply this exception 
 		</cfquery>
 	</cfif>
 
-	<cfreturn rsFeed>
-	
+	<cfreturn arguments.feedBean.getSortBy() eq 'displayStart' ? getBean('contentCalendarUtilityBean').filterCalendarItems(data=rsFeed,maxitems=0) : rsFeed />
 </cffunction>
 
 <cffunction name="getcontentItems" access="public" output="false" returntype="query">
@@ -1080,29 +1099,26 @@ version 2 without this exception.  You may, if you choose, apply this exception 
 	<cfset var previewData="">
 	<cfoutput>
 		<cfif arguments.activeOnly>
-			<cfif request.muraChangesetPreview>
+			<cfif isDefined('session.mura')>
 				<cfset previewData=getCurrentUser().getValue("ChangesetPreviewData")>
-				<cfif isDefined('previewData.contentIDList') and len(previewData.contentIDList)>
-				and (
-						(#arguments.table#.active = 1
-						<cfif arguments.liveOnly>and #arguments.table#.Approved = 1</cfif>
-						and #arguments.table#.contentID not in (#previewData.contentIDList#)	
-						)
-						
-						or 
-						
-						(
-						#arguments.table#.contentHistID in (#previewData.contentHistIDList#)
-						)	
-					)
-				<cfelse>	
-					and #arguments.table#.active = 1
+			</cfif>
+			<cfif isStruct(previewData) and previewData.siteID eq arguments.siteid and isDefined('previewData.contentIDList') and len(previewData.contentIDList)>
+			and (
+					(#arguments.table#.active = 1
 					<cfif arguments.liveOnly>and #arguments.table#.Approved = 1</cfif>
-				</cfif>
-			<cfelse>
+					and #arguments.table#.contentID not in (#previewData.contentIDList#)	
+					)
+					
+					or 
+					
+					(
+					#arguments.table#.contentHistID in (#previewData.contentHistIDList#)
+					)	
+				)
+			<cfelse>	
 				and #arguments.table#.active = 1
 				<cfif arguments.liveOnly>and #arguments.table#.Approved = 1</cfif>
-			</cfif>	
+			</cfif>
 		</cfif>
 	</cfoutput>
 </cffunction>

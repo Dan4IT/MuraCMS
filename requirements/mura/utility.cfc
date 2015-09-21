@@ -492,18 +492,21 @@ Blog: www.codfusion.com--->
 
 <cffunction name="setSessionCookies">
 	<cfif application.configBean.getSecureCookies()>
-		<cfif isdefined('session.CFID')>
-			<cfif server.coldfusion.productname neq 'Coldfusion Server'>
-				<cfset setCookie('cfid', session.CFID, "never", "", "/", true, true, true)>
-				<cfset setCookie('cftoken', session.CFTOKEN, "never", "", "/", true, true, true)>
-			<cfelse>
-				<cfcookie name="CFID" value="#session.CFID#" expires="never" secure="true" httpOnly="true"/>
-				<cfcookie name="CFTOKEN" value="#session.CFTOKEN#" expires="never" secure="true" httpOnly="true"/>
+		<cftry>
+			<cfif isdefined('session.CFID')>
+				<cfif server.coldfusion.productname neq 'Coldfusion Server'>
+					<cfset setCookie('cfid', session.CFID, "never", "", "/", true, true, true)>
+					<cfset setCookie('cftoken', session.CFTOKEN, "never", "", "/", true, true, true)>
+				<cfelse>
+					<cfcookie name="CFID" value="#session.CFID#" expires="never" secure="true" httpOnly="true"/>
+					<cfcookie name="CFTOKEN" value="#session.CFTOKEN#" expires="never" secure="true" httpOnly="true"/>
+				</cfif>
 			</cfif>
-		</cfif>
-		<cfif isdefined('session.jsessionid')>
-			<cfcookie name="JSESSIONID" value="#session.jsessionid#" expires="never" secure="true" httpOnly="true"/>
-		</cfif>
+			<cfif isdefined('session.jsessionid')>
+				<cfcookie name="JSESSIONID" value="#session.jsessionid#" expires="never" secure="true" httpOnly="true"/>
+			</cfif>
+		<cfcatch></cfcatch>
+		</cftry>
 	</cfif>
 </cffunction>
 
@@ -911,5 +914,101 @@ Blog:http://www.modernsignal.com/coldfusionhttponlycookie--->
 
 <cfreturn local.str>
 </cffunction>
+
+<cffunction name="sanitizeHref" output="false">
+	<cfargument name="href">
+
+	<cfif len(arguments.href) and listFindNoCase("http,https",listFirst(arguments.href,":"))>
+		<cfset var returnProtocol = listFirst(arguments.href,':') />
+		<cfset var returnDomain = reReplace(arguments.href, "^\w+://([^\/:]+)[\w\W]*$", "\1", "one") />
+		
+		<cfif not listfindNoCase(getBean('settingsManager').getAccessControlOriginList(),returnProtocol & "://" & returnDomain) and len(returnDomain)>
+			<cfif len(cgi.http_host)>	
+				<cfset arguments.href=replace(arguments.href,returnDomain,listFirst(cgi.http_host,":"))>
+			<cfelse>
+				<cfset arguments.href=replace(arguments.href,returnDomain,cgi.server_name)>
+			</cfif>
+		</cfif>
+	</cfif>
+
+	<cfreturn arguments.href>
+</cffunction>
+
+<cfscript>
+	public string function stripTags(text='', tagsToStrip='script,style,embed,object') {
+		var t = '';
+		var tags = ListToArray(arguments.tagsToStrip);
+		var str = arguments.text;
+
+		for ( t in tags ) {
+			str = ReReplaceNoCase(str, '<' & t & '.*?>.*?</' & t & '>', '', 'all');
+		}
+
+		return str;
+	}
+
+	public string function createCSSHook(text='') {
+		var str = LCase(stripTags(arguments.text));
+		str = Trim(ReReplace(str, '<[^>]*>', ' ', 'all'));
+		str = ReReplace(str, '\s{2,}', ' ', 'all');
+		str = ReReplace(str, '&[^;]+?;', '', 'all');
+		str = ReReplace(str, '[^a-zA-Z0-9_\-\s]', '', 'all');
+		str = ReReplace(str, '_|\s+', '-', 'all');
+
+		while( IsNumeric(Left(str, 1)) || Left(str, 1) == '-' ) {
+			str = RemoveChars(str, 1, 1);
+		}
+
+		return str;
+	}
+
+	public string function setCamelback(theString='') {
+		var str = arguments.theString;
+		str = setProperCase(str);
+		str = REReplace(str, '[^a-zA-Z0-9]', '', 'ALL');
+		return str;
+	}
+
+	public string function setProperCase(theString='') {
+		if(isdefined('arguments.theString') && len(arguments.theString)){
+			var str = arguments.theString;
+			var newString = '';
+			var frontpointer = 0;
+			var strlen = Len(str);
+			var counter = 0;
+
+			if ( strLen > 0 ) {
+				for (counter=1;counter LTE strlen;counter=counter + 1) {
+			 		frontpointer = counter + 1;
+					if (Mid(str, counter, 1) is " ") {
+						newstring = newstring & ' ' & ucase(Mid(str, frontpointer, 1)); 
+						counter = counter + 1;
+					} else {
+						if (counter is 1) {
+							newstring = newstring & ucase(Mid(str, counter, 1));
+						} else {
+							newstring = newstring & lcase(Mid(str, counter, 1));
+						}
+					}
+			 	}
+			}
+
+			return newString;
+		} else {
+			return '';
+		}
+	}
+
+	public string function renderFileSize(size=0) {
+		var str = '';
+		var theSize = Val(arguments.size);
+
+		if ( theSize > 1000000 ) {
+			return NumberFormat(theSize*.000001, 9.99) & 'Mb';
+		} else {
+			return NumberFormat(theSize*.001, 9) & 'kb';
+		}
+	}
+</cfscript>
 
 </cfcomponent>

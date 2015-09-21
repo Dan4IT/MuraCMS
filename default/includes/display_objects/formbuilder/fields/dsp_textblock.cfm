@@ -54,12 +54,9 @@
 	may, if you choose, apply this exception to your own modified versions of 
 	Mura CMS.
 --->
-<cfset variables.strField = "" />
 <cfsilent>
-<cfsavecontent variable="variables.strField">
-	<cfoutput>
-	#arguments.field.value#
-	</cfoutput>
-</cfsavecontent>
-</cfsilent>
-<cfoutput>#variables.strField#</cfoutput>
+	<cfset variables.strField = "" />
+	<cfsavecontent variable="variables.strField">
+		<cfoutput>#arguments.field.value#</cfoutput>
+	</cfsavecontent>
+</cfsilent><cfoutput>#variables.strField#</cfoutput>

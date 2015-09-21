@@ -162,7 +162,9 @@ version 2 without this exception.  You may, if you choose, apply this exception 
 </cffunction>
 
 <cffunction name="getContentRenderer" returntype="any" access="public" output="false">
-	<cfreturn getValue('contentRenderer') />	
+	<cfset var renderer=getValue('contentRenderer')>
+	<cfreturn getValue('contentRenderer')>
+	<cfreturn renderer />	
 </cffunction>
 
 <cffunction name="getThemeRenderer" returntype="any" access="public" output="false" hint="deprecated: use getContentRenderer()">
@@ -206,11 +208,12 @@ version 2 without this exception.  You may, if you choose, apply this exception 
 </cffunction>
 
 <cffunction name="loadSiteRelatedObjects" returntype="any" access="public" output="false">
-	<cfif not valueExists("HandlerFactory")>
+	
+	<cfif not isObject(getValue("HandlerFactory"))>
 		<cfset setValue('HandlerFactory',application.pluginManager.getStandardEventFactory(getValue('siteid')))>
 	</cfif>
 	<cfif not valueExists("contentRenderer")>
-		<cfset getBean('settingsManager').getSite(getValue('siteID')).getContentRenderer(getValue('MuraScope'))>
+		<cfset setValue('contentRenderer',getValue('MuraScope').getContentRenderer())>
 	</cfif>
 	<cfset setValue('localHandler',application.settingsManager.getSite(getValue('siteID')).getLocalHandler())>
 	

@@ -176,6 +176,12 @@ version 2 without this exception.  You may, if you choose, apply this exception 
 <cfset variables.instance.securecookies=false/>
 <cfset variables.instance.javaEnabled=true/>
 <cfset variables.instance.bCryptPasswords=true/>
+<cfset variables.instance.allowQueryCaching=true/>
+<cfset variables.instance.skipCleanFileCache=false/>
+<cfset variables.instance.saveEmptyExtendedValues=true/>
+<cfset variables.instance.MFAPerDeviceEnabled=false/>
+<cfset variables.instance.MFAEnabled=false/>
+<cfset variables.instance.MFASendAuthCode=true/>
 
 <cffunction name="OnMissingMethod" access="public" returntype="any" output="false" hint="Handles missing method exceptions.">
 <cfargument name="MissingMethodName" type="string" required="true" hint="The name of the missing method." />
@@ -610,7 +616,7 @@ version 2 without this exception.  You may, if you choose, apply this exception 
 
 <cffunction name="setServerPort" access="public" output="false">
 	<cfargument name="ServerPort" type="string" />
-	<cfif arguments.serverPort neq "80" and len(trim(arguments.serverPort))>
+	<cfif !ListFind('80,443', arguments.serverPort) and len(trim(arguments.serverPort))>
 		<cfset variables.instance.ServerPort = ":#arguments.ServerPort#" />
 	<cfelse>
 		<cfset variables.instance.ServerPort = "" />
@@ -1684,7 +1690,6 @@ version 2 without this exception.  You may, if you choose, apply this exception 
 
 </cffunction>
 
-
 <cffunction name="getReadOnlyQRYAttrs" output="false">
 	<cfif not request.muratransaction>
 		<cfset structAppend(arguments,
@@ -1693,6 +1698,12 @@ version 2 without this exception.  You may, if you choose, apply this exception 
 				 password=getReadOnlyDbPassword()},
 				 false)>
 	</cfif>
+
+	<cfif not getValue(property='allowQueryCaching',defaultValue=true)>
+		<cfset structDelete(arguments,'cachedWithin')>
+	</cfif>
+
+	<cfset structDelete(arguments,'readOnly')>
 	<cfreturn arguments>
 </cffunction>
 

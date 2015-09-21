@@ -335,16 +335,19 @@ version 2 without this exception.  You may, if you choose, apply this exception 
 		<cfset var extendManager = getBean('extendManager') />
 		<cfset var rstcontent=getValue("rstcontent")>
 		<cfset var rstfiles=getValue("rstfiles")>
+		<cfset var rstclassextenddata = getValue('rstclassextenddata') />
 		<cfset var rscheck="">
-		<cfset var fileArray = "" />
+		<cfset var fileArray = [] />
+		<cfset var summaryFileArray = [] />
+		<cfset var extendedAttributeFileArray = [] />
 		<cfset var extensions = {} />
 		<cfset var extension = "" />
 		<cfset var extensionsArray = [] />
-		<cfset var item = "" />
-		
+		<cfset var item = "" />		
 		<cfset var started=false>
-		
 		<cfset var i="" />
+		<cfset var backupPath = '' />
+		<cfset var filePath = '' />
 		
 		<cfif not directoryExists("#variables.backupDir#/cache")>
 			<cfset directoryCreate("#variables.backupDir#/cache")>
@@ -375,22 +378,49 @@ version 2 without this exception.  You may, if you choose, apply this exception 
 			
 			<cfset variables.zipTool.AddFiles(zipFilePath="#variables.backupDir#cachefiles.zip",directory="#variables.backupDir#/cache",recurse="true",sinceDate=arguments.sinceDate)>
 
+			<!--- Get CKFinder assets from Body + Summary regions --->
 			<cfloop query="rstcontent">
-				<cfset fileArray = parseFilePaths( arguments.siteID,rstcontent.body )>
-				
+				<!--- CKFinder 'Body/Content' Images --->
+				<cfset bodyFileArray = parseFilePaths(arguments.siteID, rstcontent.body)>
+				<cfloop from="1" to="#ArrayLen(bodyFileArray)#" index="i">
+					<cfset ArrayAppend(fileArray, bodyFileArray[i]) />	
+				</cfloop>
+				<!--- CKFinder 'Summary' Images ---->
+				<cfset summaryFileArray = parseFilePaths(arguments.siteID, rstcontent.summary) />
+				<cfloop from="1" to="#ArrayLen(summaryFileArray)#" index="i">
+					<cfset ArrayAppend(fileArray, summaryFileArray[i]) />	
+				</cfloop>
 				<cfif not structKeyExists(extensions,"#rstcontent.type#.#rstcontent.subtype#")>
 					<cfset extensions["#rstcontent.type#.#rstcontent.subtype#"] = true />
 				</cfif>
-								
-				<cfloop from="1" to="#ArrayLen(fileArray)#" index="i">
-					<cfif not directoryExists( "#variables.backupDir#/#fileArray[i]['path']#" )>
-						<cfset directoryCreate( "#variables.backupDir#/#fileArray[i]['path']#" )/>
-					</cfif>					
-					<cfset fileCopy("#siteRoot#/#fileArray[i]['path']#/#fileArray[i]['file']#","#variables.backupDir#/#fileArray[i]['path']#/#fileArray[i]['file']#") />
-				</cfloop>
-				
 			</cfloop>
 
+			<!--- Get CKFinder assets from Extended Attributes --->
+			<cfloop query="rstclassextenddata">
+				<cfset extendedAttributeFileArray = parseFilePaths(arguments.siteID, rstclassextenddata.attributeValue) />
+				<cfloop from="1" to="#ArrayLen(extendedAttributeFileArray)#" index="i">
+					<cfset ArrayAppend(fileArray, extendedAttributeFileArray[i]) />	
+				</cfloop>
+			</cfloop>
+
+			<!--- Copy CKFinder Assets to Backup --->
+			<cfif ArrayLen(fileArray)>
+				<cfloop from="1" to="#ArrayLen(fileArray)#" index="i">
+					<cfscript>
+						backupPath = URLDecode('#variables.backupDir#/#fileArray[i]['path']#', 'utf-8');
+						filePath = URLDecode('#variables.backupDir#/#fileArray[i]['path']#/#fileArray[i]['file']#', 'utf-8');
+					</cfscript>
+
+					<cfif not directoryExists(backupPath)>
+						<cfset directoryCreate(backupPath)/>
+					</cfif>
+					<cfif not fileExists(filePath)>
+						<cfset fileCopy(URLDecode('#siteRoot#/#fileArray[i]['path']#/#fileArray[i]['file']#', 'utf-8'), filePath) />
+					</cfif>					
+				</cfloop>
+			</cfif>
+
+			<!--- Prep data for extension XML file --->
 			<cfloop collection="#extensions#" item="i">
 				<cfset item = ListToArray( i,"." ) >
 				<cfset extension = extendManager.getSubTypeByName( item[1],item[2],arguments.siteID ) />
@@ -400,7 +430,6 @@ version 2 without this exception.  You may, if you choose, apply this exception 
 			</cfloop>
 
 			<cfset extensionXML = extendManager.getSubTypesAsXML( extensionsArray,false ) />
-			
 			<cffile action="write" file="#variables.backupDir#/extensions.txt" output="#extensionXML#" > 
 			
 			<cfset variables.zipTool.AddFiles(zipFilePath="#variables.backupDir#assetfiles.zip",directory="#variables.backupDir#/assets/",recurse="true",sinceDate=arguments.sinceDate)>
@@ -739,7 +768,13 @@ version 2 without this exception.  You may, if you choose, apply this exception 
 		<cfif len(arguments.siteID)>	
 			<cfif len(arguments.parentid)>	
 				<cfquery name="rsparentids">
-					select distinct contentid from tcontent
+					select distinct contentid, 
+					<cfif variables.configBean.getDBType() eq "MSSQL">
+					len(Cast(path as varchar(1000))) depth, orderno
+					<cfelse>
+					length(path) depth, orderno
+					</cfif>
+					from tcontent
 					where
 					siteid = <cfqueryparam cfsqltype="cf_sql_varchar" value="#arguments.siteID#"> 
 					and
@@ -750,7 +785,7 @@ version 2 without this exception.  You may, if you choose, apply this exception 
 					</cfif>
 					and
 					active = 1
-					order by LENGTH(path),orderno
+					order by depth, orderno
 				</cfquery>
 			</cfif>
 
@@ -774,9 +809,9 @@ version 2 without this exception.  You may, if you choose, apply this exception 
 			</cfquery>
 
 			<cfset setValue("rstcontent",rstcontent)>
-			<cfif len(arguments.changesetID) or len(arguments.parentid)>
+ 			<!--- <cfif len(arguments.changesetID) or len(arguments.parentid)>
 				<cfset fixAssetPath(arguments.siteid) />
-			</cfif>
+			</cfif> --->
 													
 			<cfquery name="rstcontentobjects">
 				select * from tcontentobjects where siteid = <cfqueryparam cfsqltype="cf_sql_varchar" value="#arguments.siteID#"/>
@@ -1359,16 +1394,15 @@ version 2 without this exception.  You may, if you choose, apply this exception 
 			</cfif>
 
 			<cfif not len(arguments.changesetID) and not len(arguments.parentid)>
-				
+
 				<cfquery name="rstclassextend">
 					select * from tclassextend where siteid = <cfqueryparam cfsqltype="cf_sql_varchar" value="#arguments.siteID#"/>
 					<cfif not arguments.includeUsers>
 					and type not in ('1','2','User','Group')
 					</cfif>
 				</cfquery>
-		
-				<cfset setValue("rstclassextend",rstclassextend)>
-		
+				<cfset setValue("rstclassextend",rstclassextend)>	
+
 				<cfquery name="rstclassextendsets">
 					select * from tclassextendsets 
 					where siteid = <cfqueryparam cfsqltype="cf_sql_varchar" value="#arguments.siteID#"/>
@@ -1377,10 +1411,9 @@ version 2 without this exception.  You may, if you choose, apply this exception 
 					<cfelse>
 						and 0=1
 					</cfif>
-				</cfquery>
-			
-				<cfset setValue("rstclassextendsets",rstclassextendsets)>
-	
+				</cfquery>			
+				<cfset setValue("rstclassextendsets",rstclassextendsets)>	
+
 				<cfquery name="rstclassextendrcsets">
 					select * from tclassextendrcsets 
 					where siteid = <cfqueryparam cfsqltype="cf_sql_varchar" value="#arguments.siteID#"/>
@@ -1390,7 +1423,6 @@ version 2 without this exception.  You may, if you choose, apply this exception 
 						and 0=1
 					</cfif>
 				</cfquery>
-			
 				<cfset setValue("tclassextendrcsets",rstclassextendrcsets)>
 			
 				<cfquery name="rstclassextendattributes">
@@ -1401,63 +1433,87 @@ version 2 without this exception.  You may, if you choose, apply this exception 
 						and 0=1
 					</cfif>
 				</cfquery>
-			
 				<cfset setValue("rstclassextendattributes",rstclassextendattributes)>
-		
+
 				<cfquery name="rstclassextenddata">
-					select tclassextenddata.baseID, tclassextenddata.attributeID, tclassextenddata.attributeValue, 
-					tclassextenddata.siteID, tclassextenddata.stringvalue, tclassextenddata.numericvalue, tclassextenddata.datetimevalue, tclassextenddata.remoteID from tclassextenddata 
+					select 
+						tclassextenddata.baseID
+						, tclassextenddata.attributeID
+						, tclassextenddata.attributeValue
+						, tclassextenddata.siteID
+						, tclassextenddata.stringvalue
+						, tclassextenddata.numericvalue
+						, tclassextenddata.datetimevalue
+						, tclassextenddata.remoteID 
+					from tclassextenddata 
 					inner join tcontent on (tclassextenddata.baseid=tcontent.contenthistid)
 					where tclassextenddata.siteid = <cfqueryparam cfsqltype="cf_sql_varchar" value="#arguments.siteID#"/>
-					<cfif not arguments.includeVersionHistory>
-						and (tcontent.active = 1 or (tcontent.changesetID is not null and tcontent.approved=0))
-						and tcontent.changesetid = <cfqueryparam cfsqltype="cf_sql_varchar" value="#arguments.changesetID#">
-					</cfif>
-					<cfif isDate(arguments.sinceDate)>
-						and lastUpdate >=<cfqueryparam cfsqltype="cf_sql_timestamp" value="#arguments.sinceDate#">
-					</cfif>
-					and tclassextenddata.attributeID in (select attributeID from tclassextendattributes
-						where siteID=<cfqueryparam cfsqltype="cf_sql_varchar" value="#arguments.siteID#"/>)
+						<cfif not arguments.includeVersionHistory>
+							and (tcontent.active = 1 or (tcontent.changesetID is not null and tcontent.approved=0))
+							<cfif Len(arguments.changesetid)>
+								and tcontent.changesetid = <cfqueryparam cfsqltype="cf_sql_varchar" value="#arguments.changesetID#">
+							</cfif>
+						</cfif>
+						<cfif isDate(arguments.sinceDate)>
+							and lastUpdate >=<cfqueryparam cfsqltype="cf_sql_timestamp" value="#arguments.sinceDate#">
+						</cfif>
+						and tclassextenddata.attributeID in (select attributeID from tclassextendattributes
+							where siteID=<cfqueryparam cfsqltype="cf_sql_varchar" value="#arguments.siteID#"/>)
 	
 					union all
 	
-					select tclassextenddata.baseID, tclassextenddata.attributeID, tclassextenddata.attributeValue, 
-					tclassextenddata.siteID, tclassextenddata.stringvalue, tclassextenddata.numericvalue, tclassextenddata.datetimevalue, tclassextenddata.remoteID from tclassextenddata 
+					select 
+						tclassextenddata.baseID
+						, tclassextenddata.attributeID
+						, tclassextenddata.attributeValue
+						, tclassextenddata.siteID
+						, tclassextenddata.stringvalue
+						, tclassextenddata.numericvalue
+						, tclassextenddata.datetimevalue
+						, tclassextenddata.remoteID 
+					from tclassextenddata 
 					inner join tclassextendattributes on (tclassextenddata.attributeID=tclassextendattributes.attributeID)
 					inner join tclassextendsets on (tclassextendattributes.extendsetid=tclassextendsets.extendsetid)
 					inner join tclassextend on (tclassextendsets.subtypeid=tclassextend.subtypeid)
 					where tclassextenddata.siteid = <cfqueryparam cfsqltype="cf_sql_varchar" value="#arguments.siteID#"/>
-					and tclassextend.type in ('Site','Custom')
-	
+						and tclassextend.type in ('Site','Custom')
 				</cfquery>
-			
 				<cfset setValue("rstclassextenddata",rstclassextenddata)>
+
 			<cfelse>
 				<cfquery name="rstclassextenddata">
-					select tclassextenddata.baseID, tclassextenddata.attributeID, tclassextenddata.attributeValue, 
-					tclassextenddata.siteID, tclassextenddata.stringvalue, tclassextenddata.numericvalue, tclassextenddata.datetimevalue, tclassextenddata.remoteID,
-					tcontent.contentid,tclassextendattributes.name
+					select 
+						tclassextenddata.baseID
+						, tclassextenddata.attributeID
+						, tclassextenddata.attributeValue
+						, tclassextenddata.siteID
+						, tclassextenddata.stringvalue
+						, tclassextenddata.numericvalue
+						, tclassextenddata.datetimevalue
+						, tclassextenddata.remoteID
+						, tcontent.contentid
+						, tclassextendattributes.name
 					from tclassextenddata 
 					inner join tcontent on (tclassextenddata.baseid=tcontent.contenthistid)
 					join tclassextendattributes on (tclassextenddata.attributeid=tclassextendattributes.attributeid)
 					where tclassextenddata.siteid = <cfqueryparam cfsqltype="cf_sql_varchar" value="#arguments.siteID#"/>
-					<cfif isDate(arguments.sinceDate)>
-						and lastUpdate >=<cfqueryparam cfsqltype="cf_sql_timestamp" value="#arguments.sinceDate#">
-					</cfif>
-					and tclassextenddata.attributeID in (select attributeID from tclassextendattributes
-						where siteID=<cfqueryparam cfsqltype="cf_sql_varchar" value="#arguments.siteID#"/>)
-					<cfif len(arguments.changesetid)>
-						and tcontent.changesetid = <cfqueryparam cfsqltype="cf_sql_varchar" value="#arguments.changesetID#">
-						and tcontent.active = 1
-					<cfelseif len(arguments.parentid)>
-						and tcontent.contentid IN (<cfqueryparam cfsqltype="cf_sql_varchar" value="#valueList(rsparentids.contentid)#" LIST="true">)
-						and tcontent.active = 1
-					</cfif>
+						<cfif isDate(arguments.sinceDate)>
+							and lastUpdate >=<cfqueryparam cfsqltype="cf_sql_timestamp" value="#arguments.sinceDate#">
+						</cfif>
+						and tclassextenddata.attributeID in (select attributeID from tclassextendattributes
+							where siteID=<cfqueryparam cfsqltype="cf_sql_varchar" value="#arguments.siteID#"/>)
+						<cfif len(arguments.changesetid)>
+							and tcontent.changesetid = <cfqueryparam cfsqltype="cf_sql_varchar" value="#arguments.changesetID#">
+							and tcontent.active = 1
+						<cfelseif len(arguments.parentid)>
+							and tcontent.contentid IN (<cfqueryparam cfsqltype="cf_sql_varchar" value="#valueList(rsparentids.contentid)#" LIST="true">)
+							and tcontent.active = 1
+						</cfif>
 				</cfquery>
 
 				<cfset setValue("rstclassextenddata",rstclassextenddata)>
 			</cfif>
-				
+
 			<cfif not len(arguments.changesetID) and not len(arguments.parentid)>
 				<!--- tmailinglist --->
 				<cfquery name="rstmailinglist">
@@ -1563,6 +1619,11 @@ version 2 without this exception.  You may, if you choose, apply this exception 
 				<cfset setValue("assetPath",application.configBean.getAssetPath())>
 				<cfset setValue("context",application.configBean.getContext())>
 			</cfif>
+		</cfif>
+
+		<!--- fix image paths --->
+		<cfif len(arguments.changesetID) or len(arguments.parentid)>
+			<cfset fixAssetPath(arguments.siteid) />
 		</cfif>
 
 		<cfif not len(arguments.changesetID) and not len(arguments.parentid)>
@@ -1704,7 +1765,13 @@ version 2 without this exception.  You may, if you choose, apply this exception 
 			<cfset BundleFiles( argumentCollection=sArgs ) />
 		<cfelse>
 			<cfquery name="rsthierarchy">
-				select contentid,contenthistid,filename,type,subtype,orderno,path,0 AS depth from tcontent
+				select contentid,contenthistid,filename,type,subtype,orderno,path,
+				<cfif variables.configBean.getDBType() eq "MSSQL">
+				len(Cast(path as varchar(1000))) depth
+				<cfelse>
+				length(path) depth
+				</cfif> 
+				from tcontent
 				where siteID = <cfqueryparam cfsqltype="cf_sql_varchar" value="#arguments.siteID#"/>
 				and active = 1
 				<cfif len(arguments.changesetID)>
@@ -1712,7 +1779,7 @@ version 2 without this exception.  You may, if you choose, apply this exception 
 				<cfelseif len(arguments.parentid)>
 					and contentid IN (<cfqueryparam cfsqltype="cf_sql_varchar" value="#valueList(rsparentids.contentid)#" LIST="true">)
 				</cfif>
-				order by LENGTH(path),orderno
+				order by depth,orderno
 			</cfquery>
 					
 			<cfloop query="rsthierarchy">
@@ -1721,6 +1788,7 @@ version 2 without this exception.  You may, if you choose, apply this exception 
 
 			<cfset setValue("rsthierarchy",rsthierarchy)>
 			<cfset sArgs.rstfiles = rstfiles />
+
 			<cfset BundlePartialFiles( argumentCollection=sArgs ) />
 
 			<!--- BEGIN BUNDLEABLE CUSTOM OBJECTS --->
@@ -1819,10 +1887,15 @@ version 2 without this exception.  You may, if you choose, apply this exception 
 		<cfargument name="siteID" type="string" default="" required="true">
 
 		<cfset var content = "" />
+		<cfset var extenddata = "" />
 		
 		<cffile action="read" variable="content" file="#variables.backupDir#wddx_rstcontent.xml">
-		<cfset content = rereplaceNoCase( content,'src=\"\/#arguments.siteID#\/assets','src="/^^siteid^^/assets','all' ) />
+		<cfset content = rereplaceNoCase( content,'src=\&quot;\/#arguments.siteID#\/assets','src=&quot;/^^siteid^^/assets','all' ) />
 		<cffile action="write" output="#content#" file="#variables.backupDir#wddx_rstcontent.xml"  charset="utf-8">
+		
+		<cffile action="read" variable="extenddata" file="#variables.backupDir#wddx_rstclassextenddata.xml">
+		<cfset extenddata = rereplaceNoCase( extenddata,'src=\&quot;\/#arguments.siteID#\/assets','src=&quot;/^^siteid^^/assets','all' ) />
+		<cffile action="write" output="#extenddata#" file="#variables.backupDir#wddx_rstclassextenddata.xml"  charset="utf-8">
 	</cffunction>
 	
 	<cffunction name="setValue" returntype="void">

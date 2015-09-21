@@ -308,6 +308,8 @@ component extends="framework" output="false" {
 		param name="session.showdashboard" default=application.configBean.getDashboard();
 		param name="session.alerts" default=structNew();
 
+		request.muraAdminRequest=true;
+
 		if(ListFirst(server.coldfusion.productVersion) >= 10){
 			param name="cookie.rb" default={value='',expires='never',httponly=true,secure=application.configBean.getSecureCookies()};
 		} else {
@@ -318,7 +320,9 @@ component extends="framework" output="false" {
 
 		if(len(request.context.rb)){
 			session.rb=request.context.rb;
-			//cookie name="rb" value="#session.rb#" expires="never";
+			if(ListFirst(server.coldfusion.productVersion) >= 10){
+				cookie.rb={value="#session.rb#",expires="never",httponly=true,secure=application.configBean.getSecureCookies()};
+			}
 		}
 		
 		if(not application.configBean.getSessionHistory()  or application.configBean.getSessionHistory() gte 30){
@@ -356,6 +360,11 @@ component extends="framework" output="false" {
 
 		if(not structKeyExists(session.alerts,'#session.siteid#')){
 			session.alerts['#session.siteid#']=structNew();
+		}
+
+		if(request.action neq 'core:csettings.editSite' 
+			&& !len(request.context.siteid) && len(session.siteid)){
+			request.context.siteid=session.siteid;
 		}
 			
 		request.event=createObject("component", "mura.event").init(request.context);
@@ -462,24 +471,18 @@ component extends="framework" output="false" {
 			location(addtoken="false", url="https://#listFirst(cgi.http_host,":")##page#");
 		}
 
-		if(yesNoFormat(application.configBean.getAccessControlHeaders()) 
-		){
-			var headers = getHttpRequestData().headers;
-		  	var origin = '';
+
+		var headers = getHttpRequestData().headers;
+
+		if(structKeyExists(headers,'Origin')){
+			
+		  	var origin = headers['Origin'];
 		  	var PC = getpagecontext().getresponse();
-		 
-		  	// Find the Origin of the request
-		  	if( structKeyExists( headers, 'Origin' ) ) {
-		   		origin = headers['Origin'];
-		  	}
 		 
 		  	// If the Origin is okay, then echo it back, otherwise leave out the header key
 		  	if(listFindNoCase(application.settingsManager.getSite(session.siteid).getAccessControlOriginList(), origin )) {
 		   		PC.setHeader( 'Access-Control-Allow-Origin', origin );
-		   		
-		   		if(yesNoFormat(application.configBean.getAccessControlCredentials())){
-		   			PC.setHeader( 'Access-Control-Allow-Credentials', 'true' );
-		   		}
+		   		PC.setHeader( 'Access-Control-Allow-Credentials', 'true' );
 		  	}
 	  	}
 

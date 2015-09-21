@@ -59,7 +59,9 @@ version 2 without this exception.  You may, if you choose, apply this exception 
 		<cfset currentBean=rc.contentBean>
 	</cfif>
 </cfif>	
-<cfif len(rc.homeID) gt 0>
+<cfif rc.contentBean.getType() eq 'Variation'>
+	<cfset href = rc.contentBean.getRemoteURL()>
+<cfelseif len(rc.homeID) gt 0>
 	<cfset homeBean = application.contentManager.getActiveContent(event.getValue('homeID'), event.getValue('siteID'))>
 	<cfset href = homeBean.getURL()>
 <cfelseif rc.action eq "add" and rc.contentBean.getType() neq "File" and rc.contentBean.getType() neq "Link">
@@ -84,16 +86,21 @@ version 2 without this exception.  You may, if you choose, apply this exception 
 <script src="#application.configBean.getContext()#/admin/assets/js/jquery/jquery.js?coreversion=#application.coreversion#" type="text/javascript"></script>
 <script src="#application.configBean.getContext()#/admin/assets/js/porthole/porthole.min.js?coreversion=#application.coreversion#" type="text/javascript"></script>
 <script>
+	<cfif rc.$.getContentRenderer().useLayoutmanager() and listFind('Form,Component',rc.contentBean.getType())>
+		var cmd={cmd:'reloadObjectAndClose',objectid:'#rc.contentBean.getContentID()#'};
+	<cfelse>
+		var cmd={cmd:'setLocation',location:encodeURIComponent("#esapiEncode('javascript',href)#")};
+	</cfif>
 	function reload(){
 		if (top.location != self.location) {
 			frontEndProxy = new Porthole.WindowProxy("#esapiEncode('javascript',session.frontEndProxyLoc)##application.configBean.getContext()#/admin/assets/js/porthole/proxy.html");
 			if (jQuery("##ProxyIFrame").length) {
 				jQuery("##ProxyIFrame").load(function(){
-					frontEndProxy.post({cmd:'setLocation',location:encodeURIComponent("#esapiEncode('javascript',href)#")});
+					frontEndProxy.post(cmd);
 				});
 			}
 			else {
-				frontEndProxy.post({cmd:'setLocation',location:encodeURIComponent("#esapiEncode('javascript',href)#")});
+				frontEndProxy.post(cmd);
 			}
 			
 		} else {

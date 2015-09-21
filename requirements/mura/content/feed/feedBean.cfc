@@ -70,6 +70,7 @@ version 2 without this exception.  You may, if you choose, apply this exception 
 <cfproperty name="restrictGroups" type="string" default=""/>
 <cfproperty name="version" type="string" default="RSS 2.0" required="true" />
 <cfproperty name="channelLink" type="string" default=""/>
+<cfproperty name="authtype" type="string" default="DEFAULT"/>
 <cfproperty name="type" type="string" default="local" required="true" />
 <cfproperty name="sortBy" type="string" default="lastUpdate" required="false" />
 <cfproperty name="sortDirection" type="string" default="desc" required="true" />
@@ -129,6 +130,7 @@ version 2 without this exception.  You may, if you choose, apply this exception 
 	<cfset variables.instance.restrictGroups="" />
 	<cfset variables.instance.Version="RSS 2.0" />
 	<cfset variables.instance.ChannelLink="" />
+	<cfset variables.instance.authtype="DEFAULT" />
 	<cfset variables.instance.type="local" />
 	<cfset variables.instance.sortBy="lastUpdate" />
 	<cfset variables.instance.sortDirection="desc" />
@@ -161,6 +163,8 @@ version 2 without this exception.  You may, if you choose, apply this exception 
 	<cfset variables.instance.useCategoryIntersect=0 />
 	<cfset variables.instance.altTable="" />
 	<cfset variables.instance.contentpoolid="" />
+	<cfset variables.instance.fieldAliases={'tag'={field='tcontenttags.tag',datatype='varchar'},'taggroup'={field='tcontenttags.taggroup',datatype='varchar'}}/>
+	<cfset variables.instance.cachedWithin=createTimeSpan(0,0,0,0)/>
 	
 	<cfreturn this />
 </cffunction>
@@ -461,6 +465,9 @@ version 2 without this exception.  You may, if you choose, apply this exception 
 	<cfargument name="menuType" default="default">
 	<cfargument name="from" required="true" default="">
 	<cfargument name="to" required="true" default="">
+	<cfargument name="cachedWithin" required="true" default="#variables.instance.cachedWithin#">
+
+	<cfset variables.instance.cachedWithin=arguments.cachedWithin>
 
 	<cfreturn variables.feedManager.getFeed(
 		feedBean=this
@@ -479,7 +486,8 @@ version 2 without this exception.  You may, if you choose, apply this exception 
 	<cfargument name="applyPermFilter" required="true" default="false">
 	<cfargument name="from" required="true" default="">
 	<cfargument name="to" required="true" default="">
-	<cfset var q=getQuery(aggregation=arguments.aggregation,applyPermFilter=arguments.applyPermFilter,from=arguments.from,to=arguments.to) />
+	<cfargument name="cachedWithin" required="true" default="#variables.instance.cachedWithin#">
+	<cfset var q=getQuery(aggregation=arguments.aggregation,applyPermFilter=arguments.applyPermFilter,from=arguments.from,to=arguments.to,cachedwithin=arguments.cachedWithin) />
 	<cfset var it=getBean("contentIterator")>
 	<cfset it.setQuery(q,variables.instance.nextn)>
 	<cfreturn it>
@@ -530,7 +538,7 @@ version 2 without this exception.  You may, if you choose, apply this exception 
 	<cfargument name="compactDisplay" type="any" required="true" default="false"/>
 	<cfset var returnStr="">
 	
-	<cfset returnStr= "#variables.configBean.getContext()#/admin/?muraAction=cFeed.edit&feedID=#variables.instance.feedID#&siteid=#variables.instance.siteID#&type=#variables.instance.type#&compactDisplay=#arguments.compactdisplay#" >
+	<cfset returnStr= "#variables.configBean.getAdminPath()#/?muraAction=cFeed.edit&feedID=#variables.instance.feedID#&siteid=#variables.instance.siteID#&type=#variables.instance.type#&compactDisplay=#arguments.compactdisplay#" >
 	
 	<cfreturn returnStr>
 </cffunction> 
@@ -601,6 +609,14 @@ version 2 without this exception.  You may, if you choose, apply this exception 
 
 <cffunction name="getAvailableCount" output="false">
 	<cfreturn getQuery(countOnly=true).count>
+</cffunction>
+
+<cffunction name="clone" output="false">
+	<cfreturn getBean("feed").setAllValues(structCopy(getAllValues()))>
+</cffunction>
+
+<cffunction name="getRemoteData" output="false">
+	<cfreturn getBean('feedManager').getRemoteFeedData(feedURL=variables.instance.channellink,maxItems=variables.instance.maxitems,authtype=variables.instance.authtype)>
 </cffunction>
 
 <cfscript>

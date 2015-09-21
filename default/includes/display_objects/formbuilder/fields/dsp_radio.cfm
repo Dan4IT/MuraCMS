@@ -56,10 +56,10 @@
 --->
 <cfsilent>
 <cfset variables.strField = "" />
-</cfsilent>
+<cfparam name="arguments.prefix" default="">
 <cfsavecontent variable="variables.strField">
 	<cfoutput>
-	#$.dspObject_Include(thefile='/formbuilder/fields/dsp_label.cfm',field=arguments.field,dataset=arguments.dataset)#</p>
+	#$.dspObject_Include(thefile='/formbuilder/fields/dsp_label.cfm',field=arguments.field,dataset=arguments.dataset,prefix=arguments.prefix)#</p>
 	<div>
 	<cfif StructKeyExists(arguments.dataset,"datarecordorder") and isArray( arguments.dataset.datarecordorder) and ArrayLen( arguments.dataset.datarecordorder ) gt 0>
 	<cfloop from="1" to="#ArrayLen(arguments.dataset.datarecordorder)#" index="variables.iiy">
@@ -72,6 +72,4 @@
 	</div>
 	</cfoutput>
 </cfsavecontent>
-<cfoutput>
-#variables.strField#
-</cfoutput>
+</cfsilent><cfoutput>#variables.strField#</cfoutput>

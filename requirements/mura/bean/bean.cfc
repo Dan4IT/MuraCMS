@@ -93,10 +93,19 @@ component extends="mura.cfobject" output="false" {
 						if(structKeyExists(synthedFunctions[arguments.MissingMethodName].args,'cfc')){
 							var bean=getBean(synthedFunctions[arguments.MissingMethodName].args.cfc);
 							//writeDump(var=bean.getProperties());
-							if(synthedFunctions[arguments.MissingMethodName].args.functionType eq 'getEntity'){
-								synthedFunctions[arguments.MissingMethodName].args.loadKey=bean.getPrimaryKey();
-							} else if (!structKeyExists(synthedFunctions[arguments.MissingMethodName].args,'loadKey')){
-								synthedFunctions[arguments.MissingMethodName].args.loadkey=application.objectMappings[variables.entityName].synthedFunctions[arguments.MissingMethodName].args.fkcolumn;
+							
+							if(!structKeyExists(synthedFunctions[arguments.MissingMethodName].args,'loadKey')
+								|| !bean.has(synthedFunctions[arguments.MissingMethodName].args.loadkey)
+							){
+								if(synthedFunctions[arguments.MissingMethodName].args.functionType eq 'getEntity'){
+									if(structKeyExists(synthedFunctions[arguments.MissingMethodName].args, "inverse")){
+										synthedFunctions[arguments.MissingMethodName].args.loadKey=getPrimaryKey();
+									} else {
+										synthedFunctions[arguments.MissingMethodName].args.loadKey=bean.getPrimaryKey();
+									}
+								} else{
+									synthedFunctions[arguments.MissingMethodName].args.loadkey=application.objectMappings[variables.entityName].synthedFunctions[arguments.MissingMethodName].args.fkcolumn;
+								}
 							}
 
 							structAppend(arguments.MissingMethodArguments,synthArgs(synthedFunctions[arguments.MissingMethodName].args),true);
@@ -171,10 +180,22 @@ component extends="mura.cfobject" output="false" {
 	}
 
 	private function synthArgs(args){
+		var translatedLoadKey=translatePropKey(args.loadkey);
 		var returnArgs={
-				"#translatePropKey(args.loadkey)#"=getValue(translatePropKey(arguments.args.fkcolumn)),
+				"#translatedLoadKey#"=getValue(translatePropKey(arguments.args.fkcolumn)),
 				returnFormat=arguments.args.returnFormat
 			};
+
+
+		/*
+		This should only happen with loading many-to-one relationships when local
+		fkcolumn (many) value is empty.
+		*/
+		if(!len(returnArgs[translatedLoadKey])){
+			setValue(translatedLoadKey,createUUID());
+			returnArgs[translatedLoadKey]=getValue(translatedLoadKey);
+		}
+
 		if(structKeyExists(arguments.args,'siteid')){
 			returnArgs.siteid=getValue('siteid');
 		}
@@ -196,8 +217,11 @@ component extends="mura.cfobject" output="false" {
 
  	function parseDateArg(String arg){
 
- 		arguments.arg=replace(arguments.arg,'T',' ');
- 		
+ 		//fix so that date's like 2015-06-23T14:22:35 can be parsed
+ 		if(refind('(\d\d\d\d-\d\d-\d\dT\d\d:\d\d:\d\d)',arguments.arg)){
+ 			arguments.arg=replace(arguments.arg,'T',' ');
+ 		}
+
 		if(lsisDate(arguments.arg)){
 			try{
 				return lsparseDateTime(arguments.arg);
@@ -227,7 +251,6 @@ component extends="mura.cfobject" output="false" {
 			arguments.data=property;
 		}
 
-		
 		var prop='';
 		if(isQuery(arguments.data) and arguments.data.recordcount){
 			for(var i=1;i<=listLen(arguments.data.columnlist);i++){
@@ -237,7 +260,7 @@ component extends="mura.cfobject" output="false" {
 			variables.instance.isNew=0;
 		} else if(isStruct(arguments.data)){
 			for(prop in arguments.data){
-				if ( IsSimpleValue(prop) && Len(prop) ) {
+				if ( IsSimpleValue(prop) && Len(prop) && !(prop==getPrimaryKey() && !len(arguments.data['#prop#'])) ) {
 					setValue(prop,arguments.data['#prop#']);
 				}
 			}		
@@ -255,6 +278,13 @@ component extends="mura.cfobject" output="false" {
 		if(arguments.property != 'value' && isValid('variableName',arguments.property) && isDefined("this.set#arguments.property#")){
 			var tempFunc=this["set#arguments.property#"];
 			tempFunc(arguments.propertyValue);
+		} else if (len(variables.entityName)) {
+			var props=getProperties();
+			if(structKeyExists(props,'#arguments.property#') && props['#arguments.property#'].datatype=='datetime'){
+				variables.instance["#arguments.property#"]=parseDateArg(arguments.propertyValue);
+			} else {
+				variables.instance["#arguments.property#"]=arguments.propertyValue;
+			}
 		} else {
 			variables.instance["#arguments.property#"]=arguments.propertyValue;
 		}
@@ -292,8 +322,16 @@ component extends="mura.cfobject" output="false" {
 		return variables.instance;
 	}
 
+	function getAll(){
+		return getAllValues(argumentCollection=arguments);
+	}
+
 	function valueExists(valueKey){
 		return structKeyExists(variables.instance,arguments.valueKey);
+	}
+
+	function has(valueKey){
+		return valueExists(argumentCollection=arguments);
 	}
 
 	function validate(){
@@ -543,21 +581,17 @@ component extends="mura.cfobject" output="false" {
 					       	 		}
 					       	 	}
 
+					       	 	if(listFindNoCase('date,timetamp',prop.dataType)){
+					       	 		prop.dataType='datetime';
+					       	 	}
+
 					       	 	if(structKeyExists(prop,'cfc')){
-					       	 		prop.persistent=true;
-
-					       	 		if(prop.fieldtype eq 'one-to-many'){
-					       	 			prop.persistent=false;
-					       	 		} else {
-					       	 			prop.persistent=true;
-					       	 			setPropAsIDColumn(prop,false);
-					       	 			//writeDump(var=prop,abort=true);
-					       	 		}
-
+					       	 		
 					       	 		param name="prop.fkcolumn" default="primaryKey";
 
 					       	 		prop.column=prop.fkcolumn;
-					       	 		prop.loadkey=prop.fkcolumn;
+
+					       	 		param name="prop.loadkey" default=prop.fkcolumn;
 
 					       	 		if(prop.nested){
 					       	 			prop.loadkey='parentid';
@@ -578,14 +612,14 @@ component extends="mura.cfobject" output="false" {
 
 						       	 			if(prop.fieldtype eq 'many-to-many'){
 
-						       	 				application.objectMappings[prop.cfc].synthedFunctions['get#variables.entityName#Iterator']={exp='bean.loadBy(argumentCollection=arguments.MissingMethodArguments)',args={prop=variables.entityName,fkcolumn=prop.fkcolumn,loadkey=prop.loadkey,siteid=true,cfc="#variables.entityName#",returnFormat="iterator",functionType='getEntityIterator'}};
-						       	 				application.objectMappings[prop.cfc].synthedFunctions['get#variables.entityName#Query']={exp='bean.loadBy(argumentCollection=arguments.MissingMethodArguments)',args={prop=variables.entityName,fkcolumn=prop.fkcolumn,loadkey=prop.loadkey,siteid=true,cfc="#variables.entityName#",returnFormat="query",functionType='getEntityQuery'}};
+						       	 				application.objectMappings[prop.cfc].synthedFunctions['get#variables.entityName#Iterator']={exp='bean.loadBy(argumentCollection=arguments.MissingMethodArguments)',args={prop=variables.entityName,fkcolumn=prop.fkcolumn,loadkey=prop.loadkey,inverse=true,siteid=true,cfc="#variables.entityName#",returnFormat="iterator",functionType='getEntityIterator'}};
+						       	 				application.objectMappings[prop.cfc].synthedFunctions['get#variables.entityName#Query']={exp='bean.loadBy(argumentCollection=arguments.MissingMethodArguments)',args={prop=variables.entityName,fkcolumn=prop.fkcolumn,loadkey=prop.loadkey,inverse=true,siteid=true,cfc="#variables.entityName#",returnFormat="query",functionType='getEntityQuery'}};
 							       	 			//application.objectMappings[prop.cfc].synthedFunctions['has#variables.entityName#']={exp='bean.loadBy(argumentCollection=arguments.MissingMethodArguments).recordcount',args={prop=variables.entityName,fkcolumn=prop.fkcolumn,cfc="#variables.entityName#",returnFormat="query",functionType='hasEntity'}};
 							       	 			application.objectMappings[prop.cfc].synthedFunctions['add#variables.entityName#']={exp='addObject(arguments.MissingMethodArguments[1])',args={prop=variables.entityName,functionType='addEntity'}};
 							       	 			application.objectMappings[prop.cfc].synthedFunctions['remove#variables.entityName#']={exp='removeObject(arguments.MissingMethodArguments[1])',args={prop=variables.entityName,functionType='removeEntity'}};
 
 						       	 			} else {
-						       	 				application.objectMappings[prop.cfc].synthedFunctions['get#variables.entityName#']={exp='bean.loadBy(argumentCollection=arguments.MissingMethodArguments)',args={prop=variables.entityName,fkcolumn="#prop.fkcolumn#",loadkey=prop.loadkey,siteid=true,cfc="#variables.entityName#",returnFormat="this",functionType='getEntity'}};
+						       	 				application.objectMappings[prop.cfc].synthedFunctions['get#variables.entityName#']={exp='bean.loadBy(argumentCollection=arguments.MissingMethodArguments)',args={prop=variables.entityName,fkcolumn="#prop.fkcolumn#",loadkey=prop.loadkey,inverse=true,siteid=true,cfc="#variables.entityName#",returnFormat="this",functionType='getEntity'}};
 						       	 				//application.objectMappings[prop.cfc].synthedFunctions['set#variables.entityName#']={exp='setValue("#prop.fkcolumn#",arguments.MissingMethodArguments[1].getValue(arguments.MissingMethodArguments[1].getValue("#prop.fkcolumn#"))',args={prop=variables.entityName,functionType='setEntity'}};
 						       	 			}
 
@@ -621,15 +655,15 @@ component extends="mura.cfobject" output="false" {
 
 					       	 				if(prop.fieldtype eq 'many-to-one'){
 
-					       	 					application.objectMappings[prop.cfc].synthedFunctions['get#variables.entityName#Iterator']={exp='bean.loadBy(argumentCollection=arguments.MissingMethodArguments)',args={prop=variables.entityName,fkcolumn=prop.fkcolumn,loadkey=prop.loadkey,siteid=true,cfc=variables.entityName,returnFormat="iterator",functionType='getEntityIterator'}};
-						       	 				application.objectMappings[prop.cfc].synthedFunctions['get#variables.entityName#Query']={exp='bean.loadBy(argumentCollection=arguments.MissingMethodArguments)',args={prop=variables.entityName,fkcolumn=prop.fkcolumn,loadkey=prop.loadkey,siteid=true,cfc=variables.entityName,returnFormat="query",functionType='getEntityQuery'}};
+					       	 					application.objectMappings[prop.cfc].synthedFunctions['get#variables.entityName#Iterator']={exp='bean.loadBy(argumentCollection=arguments.MissingMethodArguments)',args={prop=variables.entityName,fkcolumn=prop.fkcolumn,loadkey=prop.loadkey,inverse=true,siteid=true,cfc=variables.entityName,returnFormat="iterator",functionType='getEntityIterator'}};
+						       	 				application.objectMappings[prop.cfc].synthedFunctions['get#variables.entityName#Query']={exp='bean.loadBy(argumentCollection=arguments.MissingMethodArguments)',args={prop=variables.entityName,fkcolumn=prop.fkcolumn,loadkey=prop.loadkey,inverse=true,siteid=true,cfc=variables.entityName,returnFormat="query",functionType='getEntityQuery'}};
 						       	 				//application.objectMappings[prop.cfc].synthedFunctions['has#variables.entityName#']={exp='bean.loadBy(argumentCollection=arguments.MissingMethodArguments).recordcount',args={prop=variables.entityName,fkcolumn=prop.fkcolumn,cfc="#variables.entityName#",returnFormat="query",functionType='hasEntity'}};
 						       	 				application.objectMappings[prop.cfc].synthedFunctions['add#variables.entityName#']={exp='addObject(arguments.MissingMethodArguments[1])',args={prop=variables.entityName,functionType='addEntity'}};
 						       	 				application.objectMappings[prop.cfc].synthedFunctions['remove#variables.entityName#']={exp='removeObject(arguments.MissingMethodArguments[1])',args={prop=variables.entityName,functionType='removeEntity'}};
 
 					       	 				} else {
 							       	 			
-							       	 			application.objectMappings[prop.cfc].synthedFunctions['get#variables.entityName#']={exp='bean.loadBy(argumentCollection=arguments.MissingMethodArguments)',args={prop=variables.entityName,fkcolumn=prop.fkcolumn,loadkey=prop.loadkey,siteid=true,cfc=variables.entityName,returnFormat="this",functionType='getEntity'}};
+							       	 			application.objectMappings[prop.cfc].synthedFunctions['get#variables.entityName#']={exp='bean.loadBy(argumentCollection=arguments.MissingMethodArguments)',args={prop=variables.entityName,fkcolumn=prop.fkcolumn,loadkey=prop.loadkey,inverse=true,siteid=true,cfc=variables.entityName,returnFormat="this",functionType='getEntity'}};
 							       	 			//application.objectMappings[prop.cfc].synthedFunctions['set#variables.entityName#']={exp='setValue("#prop.fkcolumn#",arguments.MissingMethodArguments[1].getValue(arguments.MissingMethodArguments[1].getValue("#prop.fkcolumn#"))',args={prop=variables.entityName,functionType='setEntity'}};
 						       	 			}
 					       	 			} else {
@@ -645,6 +679,16 @@ component extends="mura.cfobject" output="false" {
 					       	 		}
 
 					       	 		param name="prop.cascade" default="none";
+
+					       	 		prop.persistent=true;
+
+					       	 		if(prop.column=='primarykey'){
+					       	 			prop.persistent=false;
+					       	 		} else {
+					       	 			prop.persistent=true;
+					       	 			setPropAsIDColumn(prop,false);
+					       	 		}
+
 
 					       	 	} else if(!structKeyExists(prop,"persistent") ){
 					       	 		prop.persistent=true;
@@ -915,6 +959,10 @@ component extends="mura.cfobject" output="false" {
 
 	function exists() {
 		return !variables.instance.isNew;
+	}
+
+	function clone(){
+		getBean("content").setAllValues(structCopy(getAllValues()));
 	}
 
 }

@@ -180,6 +180,10 @@
 		
 		<cfif params.getIsPublic() eq 0 >
 			<cfset userPoolID=variables.settingsManager.getSite(params.getSiteID()).getPrivateUserPoolID()>
+		<cfelseif params.getIsPublic() eq 1 >
+			<cfset userPoolID=variables.settingsManager.getSite(params.getSiteID()).getPublicUserPoolID()>
+		<cfelseif variables.settingsManager.getSite(params.getSiteID()).getPublicUserPoolID() neq variables.settingsManager.getSite(params.getSiteID()).getPrivateUserPoolID()>
+			<cfset userPoolID=listAppend(variables.settingsManager.getSite(params.getSiteID()).getPublicUserPoolID(),variables.settingsManager.getSite(params.getSiteID()).getPrivateUserPoolID())>
 		<cfelse>
 			<cfset userPoolID=variables.settingsManager.getSite(params.getSiteID()).getPublicUserPoolID()>
 		</cfif>
@@ -196,7 +200,7 @@
 		</cfloop>
 
 		<!--- Generate a sorted (if specified) list of baseIDs with additional fields --->
-		<cfquery attributeCollection="#variables.configBean.getReadOnlyQRYAttrs(name='rsAdvancedUserSearch')#">
+		<cfquery attributeCollection="#variables.configBean.getReadOnlyQRYAttrs(name='rsAdvancedUserSearch',cachedWithin=params.getCachedWithin())#">
 		<cfif not arguments.countOnly and dbType eq "oracle" and params.getMaxItems()>select * from (</cfif>
 		select <cfif not arguments.countOnly and params.getMaxItems()>top #params.getMaxItems()# </cfif>
 
@@ -229,19 +233,27 @@
 		
 		<cfif not arguments.countOnly and isExtendedSort>
 		left Join (select 
-				#variables.classExtensionManager.getCastString(data.getSortBy(),data.getSiteID())# extendedSort
+				#variables.classExtensionManager.getCastString(params.getSortBy(),params.getSiteID())# extendedSort
 				 ,tclassextenddatauseractivity.baseID 
 				from tclassextenddatauseractivity inner join tclassextendattributes
 				on (tclassextenddatauseractivity.attributeID=tclassextendattributes.attributeID)
-				where tclassextendattributes.siteid=<cfqueryparam cfsqltype="cf_sql_varchar" value="#data.getSiteID()#">
-				and tclassextendattributes.name=<cfqueryparam cfsqltype="cf_sql_varchar" value="#data.getSortBy()#">
+				where tclassextendattributes.siteid=<cfqueryparam cfsqltype="cf_sql_varchar" value="#params.getSiteID()#">
+				and tclassextendattributes.name=<cfqueryparam cfsqltype="cf_sql_varchar" value="#params.getSortBy()#">
 		) qExtendedSort
 		
 		on (tusers.userID=qExtendedSort.baseID)
 		</cfif>
 		
-		where tusers.type=#params.getType()# and tusers.isPublic =#params.getIsPublic()# and 
-		tusers.siteid = <cfqueryparam cfsqltype="cf_sql_varchar" value="#userPoolID#">
+		where tusers.type=#params.getType()# 
+		<cfif isNumeric(params.getIsPublic())>
+			and tusers.isPublic =#params.getIsPublic()# 
+		</cfif>
+		<cfif listLen(userPoolID) gt 1>
+			and tusers.siteid in ( <cfqueryparam cfsqltype="cf_sql_varchar" list="true" value="#userPoolID#"> )
+		<cfelse>
+			and tusers.siteid = <cfqueryparam cfsqltype="cf_sql_varchar" value="#userPoolID#">
+		</cfif>
+		
 
 		<cfif rsParams.recordcount>
 			<cfset started=false>
@@ -268,6 +280,12 @@
 					<cfelseif listFindNoCase("andOpenGrouping,and (",param.getRelationship())>
 						<cfif not openGrouping>and</cfif> (
 						<cfset openGrouping=true />
+					<cfelseif listFindNoCase("and not (",param.getRelationship())>
+						<cfif not openGrouping>and</cfif> not (
+						<cfset openGrouping=true />
+					<cfelseif listFindNoCase("or not (",param.getRelationship())>
+						<cfif not openGrouping>or</cfif> not (
+						<cfset openGrouping=true />
 					<cfelseif listFindNoCase("closeGrouping,)",param.getRelationship())>
 						)
 						<cfset openGrouping=false />
@@ -289,12 +307,18 @@
 								where tclassextenddatauseractivity.attributeID=<cfqueryparam cfsqltype="cf_sql_numeric" value="#param.getField()#">
 							<cfelse>
 								inner join tclassextendattributes on (tclassextenddatauseractivity.attributeID = tclassextendattributes.attributeID)
-								where tclassextendattributes.siteid=<cfqueryparam cfsqltype="cf_sql_varchar" value="#data.getsiteid()#">
+								where 
+								<cfif listLen(userPoolID) gt 1>
+									tclassextendattributes.siteid in ( <cfqueryparam cfsqltype="cf_sql_varchar" value="#userPoolID#"> )
+								<cfelse>
+									tclassextendattributes.siteid=<cfqueryparam cfsqltype="cf_sql_varchar" value="#userPoolID#">
+								</cfif>
+								
 								and tclassextendattributes.name=<cfqueryparam cfsqltype="cf_sql_varchar" value="#param.getField()#">
 							</cfif>
 							and 
 							<cfif param.getCondition() neq "like">
-								<cfset castfield=variables.configBean.getClassExtensionManager().getCastString(param.getField(),data.getsiteid())>
+								<cfset castfield=variables.configBean.getClassExtensionManager().getCastString(param.getField(),params.getsiteid())>
 							</cfif> 
 							<cfif param.getCondition() eq "like" and variables.configBean.getDbCaseSensitive()>
 								upper(#castfield#)
@@ -485,7 +509,7 @@
 		<cfset var dbtype=variables.configBean.getDbType() />
 
 		<cfquery attributeCollection="#variables.configBean.getReadOnlyQRYAttrs(name='rsUsers')#">
-			SELECT *
+			SELECT UserID, GroupName, Fname, Lname, UserName, Email, Type, subType, Admin, S2, LastUpdate, LastUpdateBy, isPublic, SiteID
 			FROM tusers
 			WHERE 0=0
 				AND tusers.type = 2
@@ -501,7 +525,7 @@
 					AND tusers.ispublic = <cfqueryparam cfsqltype="cf_sql_integer" value="#arguments.ispublic#" />
 				</cfif>
 				<cfif IsBoolean(arguments.isunassigned) and arguments.isunassigned>
-					AND userid NOT IN (<cfqueryparam list="true" value="#ValueList(rsUsersMemb.UserID)#" />)
+					AND userid NOT IN (SELECT DISTINCT userid FROM tusersmemb)
 				</cfif>
 				<cfif IsBoolean(arguments.showsuperusers) and arguments.showsuperusers>
 					AND s2 <> 1
@@ -516,31 +540,10 @@
 	<cffunction name="getUsersMemb" returntype="query" access="public" output="false">
 		<cfset var rsUsersMemb = '' />
 		<cfquery attributeCollection="#variables.configBean.getReadOnlyQRYAttrs(name='rsUsersMemb')#">
-			SELECT *
+			SELECT UserID, GroupID
 			FROM tusersmemb
 		</cfquery>
 		<cfreturn rsUsersMemb />
-	</cffunction>
-
-	<cffunction name="getUnassignedUsers" returntype="query" access="public" output="false">
-		<cfargument name="siteid" default="" />
-		<cfargument name="isPublic" default="" />
-		<cfargument name="showsuperusers" default="0" />
-
-		<cfset var rsUsers = getUsers(argumentCollection=arguments) />
-		<cfset var rsUnassignedUsers = '' />
-		<cfset var rsUsersMemb = getUsersMemb() />
-
-		<cfquery name="rsUnassignedUsers" dbtype="query">
-			SELECT *
-			FROM rsUsers
-			WHERE userid NOT IN (<cfqueryparam list="true" value="#ValueList(rsUsersMemb.UserID)#" />)
-				<cfif arguments.showSuperUsers NEQ 1>
-					AND s2 <> 1
-				</cfif>
-		</cfquery>
-
-		<cfreturn rsUnassignedUsers />
 	</cffunction>
 
 </cfcomponent>

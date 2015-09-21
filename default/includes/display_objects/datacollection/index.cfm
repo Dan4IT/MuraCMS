@@ -56,7 +56,7 @@
 --->
 <cfif variables.$.siteConfig('dataCollection')>
 	<cfsilent>
-    <cfset request.muraAsyncEditableObject=true>
+    <!---<cfset request.muraAsyncEditableObject=true>--->
 
 		<cfif isValid("UUID",arguments.objectID)>
 			<cfset bean = variables.$.getBean("content").loadBy(contentID=arguments.objectID,siteID=arguments.siteID)>
@@ -68,13 +68,19 @@
 	</cfsilent>
 
 	<cfoutput>
-    <cfif request.muraFrontEndRequest>
-        <div class="mura-async-object" 
-          data-object="form" 
-          data-objectid="#esapiEncode('html_attr',arguments.objectid)#" 
-          data-responsechart="#esapiEncode('html_attr',bean.getResponseChart())#" 
-          data-objectparams=#serializeJSON(objectParams)#>
-        </div>
+    <cfif this.asyncObjects and (isJson(bean.getBody()) or this.layoutmanager)>
+        <cfif this.layoutmanager>
+          <cfset objectparams.responsechart=bean.getResponseChart()>
+          <cfset objectparams.async=true>
+        <cfelse>
+          <div class="mura-async-object" 
+            data-object="form" 
+            data-objectid="#esapiEncode('html_attr',bean.getContentID())#" 
+            data-responsechart="#esapiEncode('html_attr',bean.getResponseChart())#" 
+            data-objectparams=#serializeJSON(objectParams)#>
+          </div>
+        </cfif>
+        
     <cfelse>
         <cfif not bean.getIsNew() and bean.getIsOnDisplay()>
           <cfset variables.rsForm=bean.getAllValues()>

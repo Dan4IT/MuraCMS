@@ -284,7 +284,7 @@ version 2 without this exception.  You may, if you choose, apply this exception 
 						<select name="sortBy">
 							<option value="lastUpdate" <cfif rc.feedBean.getsortBy() eq 'lastUpdate'>selected</cfif>>#application.rbFactory.getKeyValue(session.rb,'params.lastupdate')#</option>
 							<option value="releaseDate" <cfif rc.feedBean.getsortBy() eq 'releaseDate'>selected</cfif>>#application.rbFactory.getKeyValue(session.rb,'params.releasedate')#</option>
-							<option value="displayStart" <cfif rc.feedBean.getsortBy() eq 'displayStart'>selected</cfif>>#application.rbFactory.getKeyValue(session.rb,'sitemanager.content.fields.startdatetime')#</option>
+							<option value="displayStart" <cfif rc.feedBean.getsortBy() eq 'displayStart'>selected</cfif>>#application.rbFactory.getKeyValue(session.rb,'params.displaystart')#</option>
 							<option value="menuTitle" <cfif rc.feedBean.getsortBy() eq 'menuTitle'>selected</cfif>>#application.rbFactory.getKeyValue(session.rb,'params.menutitle')#</option>
 							<option value="title" <cfif rc.feedBean.getsortBy() eq 'title'>selected</cfif>>#application.rbFactory.getKeyValue(session.rb,'params.longtitle')#</option>
 							<option value="rating" <cfif rc.feedBean.getsortBy() eq 'rating'>selected</cfif>>#application.rbFactory.getKeyValue(session.rb,'params.rating')#</option>
@@ -846,7 +846,7 @@ jQuery(document).ready(function(){
 	<div class="span6">
 	      <label class="control-label">#application.rbFactory.getKeyValue(session.rb,'collections.url')#</label>
 	      <div class="controls">
-	      	<input name="channelLink" class="span12" type="text" required="true" message="#application.rbFactory.getKeyValue(session.rb,'collections.urlrequired')#" value="#esapiEncode('html_attr',rc.feedBean.getChannelLink())#" maxlength="250">
+	      	<input name="channelLink" class="span12" type="text" required="true" message="#application.rbFactory.getKeyValue(session.rb,'collections.urlrequired')#" value="#esapiEncode('html_attr',rc.feedBean.getChannelLink())#">
 	      </div>
 	</div>
 </div>
@@ -910,7 +910,7 @@ jQuery(document).ready(function(){
 	</div>
 <div class="control-group">
 	
-	<div class="span2">
+	<div class="span3">
       <label class="control-label">#application.rbFactory.getKeyValue(session.rb,'collections.maxitems')#</label>
       <div class="controls">
 	    <select class="span7" name="maxItems">
@@ -922,7 +922,7 @@ jQuery(document).ready(function(){
 	  </div>
     </div>
 
-	<div class="span2">
+	<div class="span3">
       <label class="control-label">#application.rbFactory.getKeyValue(session.rb,'collections.version')#</label>
       <div class="controls">
       <select class="span7" name="version">
@@ -932,6 +932,23 @@ jQuery(document).ready(function(){
 		</select>
 		</div>
     </div>
+    <cfif len(rc.$.globalConfig('proxyserver')) or len(rc.$.globalConfig('proxyuser'))>
+	    <div class="span6">
+	    	<label class="control-label">#application.rbFactory.getKeyValue(session.rb,'collections.authtype')#</label>
+	      	<div class="controls">
+			   <select name="authtype" class="span4">
+				<option value="DEFAULT">DEFAULT</option>
+				<option value="BASIC" <cfif rc.feedBean.getAuthType() eq 'BASIC'>selected</cfif>>BASIC</option>
+				<cfif len(rc.$.globalConfig('proxyserver'))>
+					<option value="PROXY" <cfif rc.feedBean.getAuthType() eq 'PROXY'>selected</cfif>>PROXY</option>
+				</cfif>
+				<cfif len(rc.$.globalConfig('proxyuser'))>
+					<option value="NTLM" <cfif rc.feedBean.getAuthType() eq 'NTLM'>selected</cfif>>NTLM</option>
+				</cfif>
+				</select>
+	  		</div>
+		</div>
+	</cfif>
 </div>
 
 	<div class="control-group">	
@@ -975,15 +992,15 @@ jQuery(document).ready(function(){
 			</div>
 		</div>
 		<div class="control-group">
-	      <label class="control-label">#application.rbFactory.getKeyValue(session.rb,'collections.autoimport')#</label>
-	      <div class="controls">
-     <label class="radio inline">
-	 <input name="autoImport" type="radio" value="1" <cfif rc.feedBean.getAutoImport()>checked</cfif>>#application.rbFactory.getKeyValue(session.rb,'collections.yes')# 
-	</label>
-	<label class="radio inline">
-	<input name="autoImport" type="radio" value="0" <cfif not rc.feedBean.getAutoImport()>checked</cfif>>#application.rbFactory.getKeyValue(session.rb,'collections.no')# 
-	</label>
-	  </div>
+	      	<label class="control-label">#application.rbFactory.getKeyValue(session.rb,'collections.autoimport')#</label>
+	      	<div class="controls">
+			    <label class="radio inline">
+				<input name="autoImport" type="radio" value="1" <cfif rc.feedBean.getAutoImport()>checked</cfif>>#application.rbFactory.getKeyValue(session.rb,'collections.yes')# 
+				</label>
+				<label class="radio inline">
+				<input name="autoImport" type="radio" value="0" <cfif not rc.feedBean.getAutoImport()>checked</cfif>>#application.rbFactory.getKeyValue(session.rb,'collections.no')# 
+				</label>
+	  		</div>
 	    </div>
     </div>
 </div>

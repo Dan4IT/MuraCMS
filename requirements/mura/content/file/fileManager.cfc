@@ -377,13 +377,11 @@ version 2 without this exception.  You may, if you choose, apply this exception 
 		};
 	</cfscript>
 	<cftry>
-		<cfif len(variables.configBean.getProxyServer())>
-			<cfhttp getasbinary="yes" result="local.theFile" method="get" url="http://#variables.configBean.getFileStoreEndPoint()#/#arguments.bucket#/#local.rsFile.siteid#/cache/file/#arguments.fileid##local.size#.#local.rsFile.fileExt#"
-			proxyUser="#variables.configBean.getProxyUser()#" proxyPassword="#variables.configBean.getProxyPassword()#"
-			proxyServer="#variables.configBean.getProxyServer()#" proxyPort="#variables.configBean.getProxyPort()#"></cfhttp>
-		<cfelse>
-			<cfhttp getasbinary="yes" result="local.theFile" method="get" url="http://#variables.configBean.getFileStoreEndPoint()#/#arguments.bucket#/#local.rsFile.siteid#/cache/file/#arguments.fileid##local.size#.#local.rsFile.fileExt#"></cfhttp>
-		</cfif>
+		<cfhttp attributeCollection='#getHTTPAttrs(
+			getasbinary="yes",
+			result="local.theFile",
+			method="get",
+			url="http://#variables.configBean.getFileStoreEndPoint()#/#arguments.bucket#/#local.rsFile.siteid#/cache/file/#arguments.fileid##local.size#.#local.rsFile.fileExt#")#'>
 		<cfcatch>
 		</cfcatch>
 	</cftry>
@@ -453,17 +451,13 @@ version 2 without this exception.  You may, if you choose, apply this exception 
 		<!---<cffile action="readBinary" file="#local.filePath#" variable="local.fileContent">--->
 	<cfelse>
 		<cfset local.isLocalFile=false>
-		<cfif len(variables.configBean.getProxyServer())>
-			<cfhttp url="#local.filePath#" result="local.remoteGet" getasbinary="yes" 
-			proxyUser="#variables.configBean.getProxyUser()#" proxyPassword="#variables.configBean.getProxyPassword()#"
-			proxyServer="#variables.configBean.getProxyServer()#" proxyPort="#variables.configBean.getProxyPort()#">
-				<cfhttpparam type="header" name="accept-encoding" value="no-compression" />
-			</cfhttp>
-		<cfelse>
-			<cfhttp url="#local.filePath#" result="local.remoteGet" getasbinary="yes">
-				<cfhttpparam type="header" name="accept-encoding" value="no-compression" />
-			</cfhttp>
-		</cfif>
+		
+		<cfhttp attributeCollection='#getHTTPAttrs(
+				url="#local.filePath#",
+				result="local.remoteGet",
+				getasbinary="yes")#'>
+			<cfhttpparam type="header" name="accept-encoding" value="no-compression" />
+		</cfhttp>
 
 		<cfset local.results.contentType=listFirst(local.remoteGet.mimeType ,"/")>
 		<cfset local.results.contentSubType=listLast(local.remoteGet.mimeType ,"/")>
@@ -542,26 +536,46 @@ version 2 without this exception.  You may, if you choose, apply this exception 
 		}
 
 		for (var i in arguments.scope){
-			if(structKeyExists(arguments.scope,'#i#')){
+			if(structKeyExists(arguments.scope,'#i#') && isSimpleValue(arguments.scope['#i#']) ){
 				if(isPostedFile(i)){
 
 					temptext=listLast(getPostedClientFileName(i),'.');
 					
-					if(len(tempText) && len(tempText) < 4 && !listFindNoCase(allowedExtensions,temptext)){
+					if(len(tempText) && len(tempText) < 5 && !listFindNoCase(allowedExtensions,temptext)){
+						return true;
+					}	
+				}
+
+				if(isValid('url',arguments.scope['#i#']) && right(arguments.scope['#i#'],1) != '/'){
+					tempText=arguments.scope['#i#'];
+
+					//if it contains a protocol
+					if(reFindNoCase("(https://||http://)", tempText)){
+
+						//strip it out
+						tempText=reReplaceNoCase(tempText, "(http://||https://)", "");
+
+						//and then on continue if the url contains a list longer than one
+						if(listLen(tempText,'/') ==1) {
+							break;
+						}
+					}
+
+					tempText=listFirst(arguments.scope['#i#'],'?');
+					tempText=listLast(tempText,'/');
+					tempText=listLast(tempText,'.');
+
+					/*
+					if(i=='body'){
+						writeDump(var=tempText,abort=1);
+					}
+					*/
+					
+					if(len(tempText) < 5 && !listFindNoCase(allowedExtensions,temptext)){
 						return true;
 					}	
 				}
 				
-				if(isValid('url',arguments.scope['#i#']) 
-					&& listLen(arguments.scope['#i#'],'.')
-					){
-					
-					tempText=listLast(arguments.scope['#i#'],'.');
-
-					if(len(tempText) < 4 && !listFindNoCase(allowedExtensions,temptext)){
-						return true;
-					}	
-				}
 			}
 		}
 	
@@ -577,7 +591,7 @@ version 2 without this exception.  You may, if you choose, apply this exception 
 
 		    <cfif IsDefined("tmpPartsArray")>
 		        <cfloop array="#tmpPartsArray#" index="local.tmpPart">
-		            <cfif local.tmpPart.isFile() AND local.tmpPart.getName() EQ arguments.fieldName> <!---   --->
+		            <cfif local.tmpPart.isFile() AND local.tmpPart.getName() EQ arguments.fieldName>
 		                <cfreturn local.tmpPart.getFileName() />
 		            </cfif>
 		        </cfloop>
@@ -615,6 +629,11 @@ version 2 without this exception.  You may, if you choose, apply this exception 
 	<cfset var filePath="#application.configBean.getFileDir()#/#arguments.siteID#/cache/file/">
 	<cfset var check="">
 
+	<!--- Allow function to be escaped for huge file directories --->
+	<cfif variables.configBean.getValue('skipCleanFileCache')>
+		<cfreturn>
+	</cfif>
+
 	<cfquery attributeCollection="#variables.configBean.getReadOnlyQRYAttrs(name='rsDB')#">
 	select fileID from tfiles where siteID=<cfqueryparam cfsqltype="cf_sql_varchar" value="#arguments.siteID#">
 	</cfquery>
@@ -636,16 +655,18 @@ version 2 without this exception.  You may, if you choose, apply this exception 
 	<cfdirectory action="list" name="rsDIR" directory="#filePath#">
 	
 	<cfquery name="rsCheck" dbType="query">
-	select * from rsDIR where name like '%_H%'
+	select * from rsDIR where name like '%\_H%' ESCAPE '\'
 	</cfquery>
 
 	<cfif rsCheck.recordcount>
 		<cfloop query="rscheck">
-			<cfset check=listGetAt(rsCheck.name,2,"_")>
-			<cfif len(check) gt 1>
-				<cfset check=mid(check,2,1)>
-				<cfif isNumeric(check)>
-					<cffile action="delete" file="#filepath##rsCheck.name#">
+			<cfif listLen(rsCheck.name,"_") gt 1>	
+				<cfset check=listGetAt(rsCheck.name,2,"_")>
+				<cfif len(check) gt 1>
+					<cfset check=mid(check,2,1)>
+					<cfif isNumeric(check)>
+						<cffile action="delete" file="#filepath##rsCheck.name#">
+					</cfif>
 				</cfif>
 			</cfif>
 		</cfloop>
@@ -793,7 +814,12 @@ version 2 without this exception.  You may, if you choose, apply this exception 
 
 	<cfset arguments.siteid=getBean('settingsManager').getSite(arguments.siteid).getFilePoolID()>
 	
-	<cfif arguments.complete or  arguments.secure or isDefined('variables.$') and len(variables.$.event('siteID')) and variables.$.event('siteID') neq arguments.siteID >
+	<cfif arguments.complete 
+		OR arguments.secure
+		OR isDefined('variables.$') 
+		AND len(variables.$.event('siteID')) 
+		AND variables.$.event('siteID') neq arguments.siteID
+		AND !isValid('URL', application.configBean.getAssetPath())>
 		<cfif arguments.secure>
 			<cfset begin='https://#application.settingsManager.getSite(arguments.siteID).getDomain()##application.configBean.getServerPort()#'>
 		<cfelse>

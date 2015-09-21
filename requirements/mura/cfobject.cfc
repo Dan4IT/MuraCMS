@@ -56,8 +56,6 @@ version 2 without this exception.  You may, if you choose, apply this exception 
 	}
 </cfscript>
 
-<cfset variables.translator=""/>
-
 <cffunction name="init" returntype="any" access="public" output="false">
 	<cfreturn this />
 </cffunction>	
@@ -250,10 +248,100 @@ version 2 without this exception.  You may, if you choose, apply this exception 
 		throw("You have attempted to call the method #arguments.methodName# which does not exist in #getClassFullName()#");
 	}
 
-	function getQueryService(){
-		return new Query(argumentCollection=getBean('configBean').getReadOnlyQRYAttrs(argumentCollection=arguments));
+	function hasCustomDatasource(){
+		return len(getValue('customDatasource'));
 	}
 
+	function getQueryAttrs(readOnly=false){
+		if( hasCustomDatasource() ){
+			structAppend(arguments,
+				{datasource=getValue('customDatasource'),
+				username='',
+				password=''},
+				false);
+
+			if(!getBean('configBean').getValue(property='allowQueryCaching',defaultValue=true)){
+				structDelete(arguments,'cachedWithin');
+			}
+
+			structDelete(arguments,'readOnly');
+			
+			return arguments;
+		} else if (isDefined('arguments.readOnly')) {
+			if(arguments.readOnly){
+				return getBean('configBean').getReadOnlyQRYAttrs(argumentCollection=arguments);
+			} else {
+				structDelete(arguments,'readOnly');
+				return arguments;
+			}
+		} else {
+			return structNew();
+		}
+	}
+
+	function getQueryService(readOnly=false){
+		return new Query(argumentCollection=getQueryAttrs(argumentCollection=arguments));
+	}
+
+	function getHTTPService(){
+		var configBean=getBean('configBean');
+		var hs=new http();
+		if(len(configBean.getProxyServer())){
+			hs.setProxyServer(configBean.getProxyServer());
+			hs.setProxyPort(configBean.getProxyPort());
+			
+			hs.setProxyUser(configBean.getProxyUser());
+			hs.setProxyPassword(configBean.getProxyPassword());
+
+			if(configBean.getProxyAuthType() == 'NTLM'){
+				hs.setAuthType('NTLM');
+			}
+		}
+
+		return hs;
+	}
+
+	function getHTTPAttrs(authtype=''){
+            var configBean=getBean('configBean');
+            var connectionType = "BASIC";
+             
+            if(listFindNoCase('PROXY,NTLM,BASIC',arguments.authtype)){
+                connectionType = arguments.authtype;
+            } else if(len(configBean.getProxyServer())){
+                connectionType = 'PROXY';
+            }
+
+            structDelete(arguments,"authtype");
+             
+            if(connectionType == "NTLM") {
+                    
+                if(find('\',configBean.getProxyUser())){
+                    structAppend(arguments,{
+                        domain=listFirst(configBean.getProxyUser(),'\'),
+                        username=listLast(configBean.getProxyUser(),'\')
+                    });
+                } else {
+                    arguments.username=configBean.getProxyUser();
+                }
+                    
+                structAppend(arguments,{
+                    password=configBean.getProxyPassword(),
+                    authtype="NTLM"
+                });
+                          
+            } else if(connectionType == 'PROXY'){
+                    
+                structAppend(arguments,{
+                    proxyserver=configBean.getProxyServer(),
+                    proxyport=configBean.getProxyPort(),
+                    proxyuser=configBean.getProxyUser(),
+                    proxypassword=configBean.getProxyPassword()
+                });
+                    
+            }
+             
+            return arguments;
+       }
 </cfscript>
 
 </cfcomponent>

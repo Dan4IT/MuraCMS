@@ -86,7 +86,7 @@
 			<cfparam name="session.topID" default="00000000000000000000000000000000001">
 			<cfset arguments.rc.topid=session.topID>
 		<cfelseif (left(arguments.rc.topID,10) neq "0000000000" or arguments.rc.topID eq "00000000000000000000000000000000001")
-			and not listFindNoCase("Form,Component", arguments.rc.type)>
+			and not listFindNoCase("Form,Component,Variation", arguments.rc.type) and rc.moduleid neq "00000000000000000000000000000000099">
 			<cfset session.topID=arguments.rc.topid>
 		</cfif>
 	</cfif>
@@ -329,7 +329,7 @@
 			<cfif application.configBean.getValue(property='autopreviewimages',defaultValue=true) and not arguments.rc.ajaxrequest and len(request.newImageIDList) and not arguments.rc.murakeepediting>
 				<cfset arguments.rc.fileid=request.newImageIDList>
 				<cfset arguments.rc.contenthistid=arguments.rc.contentBean.getContentHistID()>
-				<cfset variables.fw.redirect(action="cArch.imagedetails",append="contenthistid,siteid,fileid,compactDisplay",path="./")>
+				<cfset variables.fw.redirect(action="cArch.imagedetails",append="contenthistid,siteid,fileid,compactDisplay,homeID",path="./")>
 			</cfif>
 		<cfelse>
 			<cfset arguments.rc.contentBean.validate().getErrors().csrf='Your request contained invalid tokens'>
@@ -376,15 +376,15 @@
 					<cfset variables.fw.redirect(action="cChangesets.assignments",append="changesetID,siteid",path="./")>
 				</cfif>
 				
-				<cfif structIsEmpty(rc.contentBean.getErrors())>
+				<cfif structIsEmpty(arguments.rc.contentBean.getErrors())>
 					<cfset structDelete(session.mura,"editBean")>
 					<cfif arguments.rc.preview eq 0 and not arguments.rc.murakeepediting>
 						<cfset variables.fw.redirect(action="cArch.list",append="topid,siteid,startrow,moduleid",path="./")>
 					<cfelse>
-						<cfset arguments.rc.parentid=rc.contentBean.getParentID()>
-						<cfset arguments.rc.type=rc.contentBean.getType()>
-						<cfset arguments.rc.contentid=rc.contentBean.getContentID()>
-						<cfset arguments.rc.contenthistid=rc.contentBean.getContentHistID()>
+						<cfset arguments.rc.parentid=arguments.rc.contentBean.getParentID()>
+						<cfset arguments.rc.type=arguments.rc.contentBean.getType()>
+						<cfset arguments.rc.contentid=arguments.rc.contentBean.getContentID()>
+						<cfset arguments.rc.contenthistid=arguments.rc.contentBean.getContentHistID()>
 						<cfset arguments.rc.preview=arguments.rc.preview>
 						<cfset variables.fw.redirect(action="cArch.edit",append="contenthistid,contentid,type,parentid,topid,siteid,moduleid,preview,startrow,return,compactDisplay",path="./")>
 					</cfif>

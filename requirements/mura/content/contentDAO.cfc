@@ -190,7 +190,7 @@ tcontent.imageSize,tcontent.imageHeight,tcontent.imageWidth,tcontent.childTempla
 					tcontent.#arguments.sourceIterator.getRecordIdField()# in (<cfqueryparam cfsqltype="cf_sql_varchar" list="true" value="#arguments.sourceIterator.getPageIDList()#">)
 					#renderActiveClause("tcontent",arguments.siteID)#
 					and tcontent.siteid=<cfqueryparam cfsqltype="cf_sql_varchar" value="#arguments.siteID#" />
-					and type in ('Page','Folder','File','Calendar','Link','Gallery','Component','Form')
+					and type in ('Page','Folder','File','Calendar','Link','Gallery','Component','Form','Variation')
 				</cfquery>
 
 				<cfset arguments.sourceIterator.setPageQuery("page#arguments.sourceIterator.getPageIndex()#",rsPage)>
@@ -216,7 +216,7 @@ tcontent.imageSize,tcontent.imageHeight,tcontent.imageWidth,tcontent.childTempla
 					where tcontent.contentid=<cfqueryparam cfsqltype="cf_sql_varchar" value="#arguments.contentID#" /> 
 					#renderActiveClause("tcontent",arguments.siteID)#
 					and tcontent.siteid=<cfqueryparam cfsqltype="cf_sql_varchar" value="#arguments.siteID#" />
-					and type in ('Page','Folder','File','Calendar','Link','Gallery','Component','Form')
+					and type in ('Page','Folder','File','Calendar','Link','Gallery','Component','Form','Variation')
 				</cfquery>
 			</cfif>
 		</cfif>
@@ -278,7 +278,7 @@ tcontent.imageSize,tcontent.imageHeight,tcontent.imageWidth,tcontent.childTempla
 				<cfif len(arguments.type)>
 					and tcontent.type=<cfqueryparam cfsqltype="cf_sql_varchar" value="#arguments.type#" />
 				<cfelse>
-					and type in ('Page','Folder','File','Calendar','Link','Gallery','Component','Form')
+					and type in ('Page','Folder','File','Calendar','Link','Gallery','Component','Form','Variation')
 				</cfif>	
 			</cfquery>
 		</cfif>
@@ -348,7 +348,7 @@ tcontent.imageSize,tcontent.imageHeight,tcontent.imageWidth,tcontent.childTempla
 				<cfif len(arguments.type)>
 					and tcontent.type=<cfqueryparam cfsqltype="cf_sql_varchar" value="#arguments.type#" />
 				<cfelse>
-					and type in ('Page','Folder','File','Calendar','Link','Gallery','Component','Form')
+					and type in ('Page','Folder','File','Calendar','Link','Gallery','Component','Form','Variation')
 				</cfif>	
 			</cfquery>
 		</cfif>
@@ -418,7 +418,7 @@ tcontent.imageSize,tcontent.imageHeight,tcontent.imageWidth,tcontent.childTempla
 				<cfif len(arguments.type)>
 					and tcontent.type=<cfqueryparam cfsqltype="cf_sql_varchar" value="#arguments.type#" />
 				<cfelse>
-					and type in ('Page','Folder','File','Calendar','Link','Gallery','Component','Form')
+					and type in ('Page','Folder','File','Calendar','Link','Gallery','Component','Form','Variation')
 				</cfif>	
 			</cfquery>
 		</cfif>
@@ -483,7 +483,7 @@ tcontent.imageSize,tcontent.imageHeight,tcontent.imageWidth,tcontent.childTempla
 			left join tapprovalrequests on (tcontent.contenthistid=tapprovalrequests.contenthistid)
 			where 
 			<cfif arguments.filename neq ''>
-			 tcontent.filename=<cfqueryparam cfsqltype="cf_sql_varchar" value="#arguments.filename#" />
+			 tcontent.filename=<cfqueryparam cfsqltype="cf_sql_varchar" value="#lcase(arguments.filename)#" />
 			#renderActiveClause("tcontent",arguments.siteID)#
 			and tcontent.type in('Page','Folder','Calendar','Gallery','File','Link') 
 			<cfelse>
@@ -495,7 +495,7 @@ tcontent.imageSize,tcontent.imageHeight,tcontent.imageWidth,tcontent.childTempla
 			<cfif len(arguments.type)>
 				and tcontent.type=<cfqueryparam cfsqltype="cf_sql_varchar" value="#arguments.type#" />
 			<cfelse>
-				and type in ('Page','Folder','File','Calendar','Link','Gallery','Component','Form')
+				and type in ('Page','Folder','File','Calendar','Link','Gallery','Component','Form','Variation')
 			</cfif>	
 		</cfquery>
 
@@ -1504,27 +1504,24 @@ tcontent.imageSize,tcontent.imageHeight,tcontent.imageWidth,tcontent.childTempla
 <cfargument name="siteID">
 	<cfset var previewData="">
 	<cfoutput>
-			<cfif request.muraChangesetPreview>
-				<cfset previewData=getCurrentUser().getValue("ChangesetPreviewData")>
-				<cfif isDefined('previewData') and len(previewData.contentIDList)>
-					and (
-							(#arguments.table#.active = 1			
-							and #arguments.table#.contentID not in (#previewData.contentIDList#)	
-							)
-							
-							or 
-							
-							(
-							#arguments.table#.contentHistID in (#previewData.contentHistIDList#)
-							)		
-						)	
-				<cfelse>
-					and #arguments.table#.active = 1	
-				</cfif>
-			<cfelse>
-				and #arguments.table#.active = 1
-				
-			</cfif>	
+		<cfif isDefined('session.mura')>
+			<cfset previewData=getCurrentUser().getValue("ChangesetPreviewData")>
+		</cfif>
+		<cfif isStruct(previewData) and previewData.siteID eq arguments.siteid and isDefined('previewData.contentIDList') and len(previewData.contentIDList)>
+			and (
+					(#arguments.table#.active = 1			
+					and #arguments.table#.contentID not in (#previewData.contentIDList#)	
+					)
+					
+					or 
+					
+					(
+					#arguments.table#.contentHistID in (#previewData.contentHistIDList#)
+					)		
+				)	
+		<cfelse>
+			and #arguments.table#.active = 1	
+		</cfif>	
 	</cfoutput>
 </cffunction>
 

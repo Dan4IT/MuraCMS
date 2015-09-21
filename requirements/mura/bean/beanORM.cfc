@@ -68,7 +68,7 @@ component extends="mura.bean.bean" versioned=false {
 
 					if(structKeyExists(prop,"fieldType") and prop.fieldType eq "id"){
 						variables.instance[prop.column]=createUUID();
-					}else if (listFindNoCase("date,datetime,timestamp",prop.datatype)){
+					} else if (listFindNoCase('created,lastupdate',prop.column) && prop.datatype=='datetime' && !(structKeyExists(prop,"default") && prop.default != 'null')){
 						variables.instance[prop.column]=now();
 					} else if(structKeyExists(prop,"default")){
 						if(prop.default neq 'null'){
@@ -94,7 +94,7 @@ component extends="mura.bean.bean" versioned=false {
 
 				} 
 				else {
-					if(listFindNoCase("date,datetime,timestamp",prop.datatype)){
+					if(listFindNoCase('created,lastupdate',prop.column) && prop.datatype=='datetime' && !(structKeyExists(prop,"default") && prop.default != 'null')){
 						variables.instance[prop.column]=now();
 					} else if(structKeyExists(prop,"default")){
 						if(prop.default neq 'null'){
@@ -234,7 +234,7 @@ component extends="mura.bean.bean" versioned=false {
 					if(structKeyExists(props[prop],"fieldtype")){
 						if(props[prop].fieldtype eq "id"){
 							getDbUtility().addPrimaryKey(argumentCollection=props[prop]);
-						} else if ( listFindNoCase('one-to-many,many-to-one,index',props[prop].fieldtype) ){
+						} else if ( listFindNoCase('one-to-one,one-to-many,many-to-one,index',props[prop].fieldtype) ){
 							getDbUtility().addIndex(argumentCollection=props[prop]);
 						}
 					}
@@ -252,27 +252,16 @@ component extends="mura.bean.bean" versioned=false {
 		return structKeyExists(application.objectMappings[variables.entityName],'datasource');
 	}
 
-	function getsCustomDatasource(){
+	function getCustomDatasource(){
 		return application.objectMappings[variables.entityName].datasource;
 	}
 
-	function getQueryAttrs(){
-		if( hasCustomDatasource() ){
-			structAppend(arguments,
-				{datasource=getsCustomDatasource(),
-				username='',
-				password=''},
-				false);
-			return arguments;
-		} else if (structKeyExists(arguments, "readOnly")) {
-			return getBean('configBean').getReadOnlyQRYAttrs(argumentCollection=arguments);
-		} else {
-			return structNew();
-		}
+	function getQueryAttrs(readOnly=getReadOnly()){
+		return super.getQueryAttrs(argumentCollection=arguments);
 	}
 
-	function getQueryService(){
-		return new Query(argumentCollection=getQueryAttrs(argumentCollection=arguments));
+	function getQueryService(readOnly=getReadOnly()){
+		return super.getQueryService(argumentCollection=arguments);
 	}
 
 	private function addQueryParam(qs,prop,value){
@@ -298,6 +287,7 @@ component extends="mura.bean.bean" versioned=false {
 
 			if(columns[arguments.prop.column].datatype eq 'datetime'){
 				paramArgs.cfsqltype='cf_sql_timestamp';
+				paramArgs.value=parseDateArg(paramArgs.value);
 			}
 
 			if(listFindNoCase('text,longtext',columns[arguments.prop.column].datatype)){
@@ -344,19 +334,19 @@ component extends="mura.bean.bean" versioned=false {
 			var sql='';
 			var qs=getQueryService();
 
-			for (prop in props){
-				if(props[prop].persistent){
-					addQueryParam(qs,props[prop],variables.instance[props[prop].column]);
-				}
-			}
-
 			qs.addParam(name='primarykey',value=variables.instance[getPrimaryKey()],cfsqltype='cf_sql_varchar');
 
 			if(qs.execute(sql='select #getPrimaryKey()# from #getTable()# where #getPrimaryKey()# = :primarykey').getResult().recordcount){
 				
-				preUpdate();
-			
 				pluginManager.announceEvent('onBefore#variables.entityName#Update',event);
+
+				preUpdate();
+
+				for (prop in props){
+					if(props[prop].persistent){
+						addQueryParam(qs,props[prop],variables.instance[props[prop].column]);
+					}
+				}
 
 				if(!hasErrors()){
 
@@ -403,12 +393,17 @@ component extends="mura.bean.bean" versioned=false {
 				}
 				
 			} else{
+				
+				pluginManager.announceEvent('onBefore#variables.entityName#Create',event);
 
 				preCreate();
 				preInsert();
-				
 
-				pluginManager.announceEvent('onBefore#variables.entityName#Create',event);
+				for (prop in props){
+					if(props[prop].persistent){
+						addQueryParam(qs,props[prop],variables.instance[props[prop].column]);
+					}
+				}
 
 				if(!hasErrors()){
 
@@ -634,8 +629,8 @@ component extends="mura.bean.bean" versioned=false {
 		return this;
 	}
 
-	function loadBy(returnFormat="self"){
-		var qs=getQueryService(readOnly=true);
+	function loadBy(returnFormat="self",cachedWithin=createTimeSpan(0,0,0,0)){
+		var qs=getQueryService(readOnly=true,cachedWithin=arguments.cachedWithin);
 		var sql="";
 		var props=getProperties();
 		var prop="";
@@ -649,6 +644,10 @@ component extends="mura.bean.bean" versioned=false {
 		var primaryOnly=true;
 		var primaryFound=false;
 		var primarykeyargvalue='';
+
+		if(!isDefined('arguments.siteid') && hasProperty('siteid') && len(getValue('siteID'))){
+			arguments.siteid=getValue('siteID');
+		}
 
 		savecontent variable="sql"{
 			writeOutput(getLoadSQL());

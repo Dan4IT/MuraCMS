@@ -173,8 +173,9 @@ component persistent='false' accessors='true' output='false' extends='controller
 			setUsersIterator(rc);
 
 		// unassigned users
-			arguments.rc.rsUnassignedUsers = getUserManager().getUnassignedUsers(
-				siteid=arguments.rc.siteid
+			arguments.rc.rsUnassignedUsers = getUserManager().getUsers(
+				rs=arguments.rc.rs
+				, siteid=arguments.rc.siteid
 				, ispublic=arguments.rc.ispublic
 				, isunassigned=1
 			);
@@ -306,7 +307,12 @@ component persistent='false' accessors='true' output='false' extends='controller
 				break;
 		}
 
-		variables.fw.redirect(action='cUsers.edituser', preserve='siteid,userid,routeid', path='./');
+		if(arguments.rc.routeid=='editprofile'){
+			variables.fw.redirect(action='cEditProfile.edit', path='./');
+		} else {
+			variables.fw.redirect(action='cUsers.edituser', preserve='siteid,userid,routeid', path='./');
+		}
+		
 	}
 
 	public any function route(rc) {

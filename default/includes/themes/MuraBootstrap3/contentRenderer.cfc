@@ -99,6 +99,9 @@
 		this.ulNestedCustomString = "";
 		this.liNestedClass = "";
 
+		//With asyncObjects set to true some display objects are loaded via ajax
+		//this.asyncObjects = true;
+
 		// pagination vars
 		this.ulPaginationClass = "pagination";
 		this.ulPaginationWrapperClass = "";
@@ -303,6 +306,7 @@
 		this.searchFormSubmitClass="btn btn-default fa fa-search";
 		
 		// dsp_search_results.cfm
+		this.searchShowNumbers=1;
 		this.searchResultWrapperClass="";
 		this.searchResultInnerClass="";
 		this.searchResultsRowClass="";

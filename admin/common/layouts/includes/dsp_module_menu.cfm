@@ -54,7 +54,7 @@
   </cfif>
 
   <cfoutput>
-    <li id="modules" class="dropdown<cfif listFind('00000000000000000000000000000000003,00000000000000000000000000000000004',rc.moduleID) or not listFindNoCase('carch,cchain,cusers,csettings,cdashboard,ceditprofile,nmessage,ctrash,clogin,cextend',rc.originalcircuit) and not (rc.moduleID eq '00000000000000000000000000000000000' and rc.originalcircuit eq 'cPerm')> active</cfif>">
+    <li id="modules" class="dropdown<cfif listFind('00000000000000000000000000000000003,00000000000000000000000000000000004,00000000000000000000000000000000099',rc.moduleID) or not listFindNoCase('carch,cchain,cusers,csettings,cdashboard,ceditprofile,nmessage,ctrash,clogin,cextend',rc.originalcircuit) and not (rc.moduleID eq '00000000000000000000000000000000000' and rc.originalcircuit eq 'cPerm')> active</cfif>">
       <a class="dropdown-toggle" data-toggle="dropdown" href="##">
         <i class="icon-th-large"></i> 
         <span>#application.rbFactory.getKeyValue(session.rb,"layout.modules")#</span> 
@@ -96,6 +96,17 @@
             </li>
           </cfif>
         <!---- /Components --->
+
+        <!--- Variations --->
+          <cfif application.configBean.getValue(property='variations',defaultValue=false) and application.permUtility.getModulePerm("00000000000000000000000000000000099",session.siteid)>
+            <li <cfif rc.moduleid eq '00000000000000000000000000000000099'>class="active"</cfif>>
+              <a href="#application.configBean.getContext()#/admin/?muraAction=cArch.list&amp;siteid=#session.siteid#&amp;topid=00000000000000000000000000000000099&amp;parentid=00000000000000000000000000000000099&amp;moduleid=00000000000000000000000000000000099">
+                <i class="icon-cog"></i> 
+                #application.rbFactory.getKeyValue(session.rb,"layout.variations")#
+              </a>
+            </li>
+          </cfif>
+        <!---- /Variations --->
        
         <!--- Categories --->
           <cfif application.permUtility.getModulePerm("00000000000000000000000000000000010",session.siteid)>

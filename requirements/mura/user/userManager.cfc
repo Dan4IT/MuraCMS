@@ -426,6 +426,8 @@
 			
 			<!--- Reset extended data internal ids --->
 			<cfset arguments.data=userBean.getAllValues()>
+			<cfset arguments.updateGroups = pluginEvent.getValue('updateGroups') />
+			<cfset arguments.updateInterests = pluginEvent.getValue('updateInterests') />
 		
 			<cfif isDefined('arguments.data.activationNotify') and userBean.getInActive() eq 0>	
 				<cfset variables.userUtility.sendActivationNotification(userBean) />
@@ -1043,7 +1045,8 @@
 		<cfargument name="siteid" default="" />
 		<cfargument name="ispublic" default="1" />
 		<cfargument name="showSuperUsers" default="0" />
-		<cfreturn variables.userGateway.getUnassignedUsers(argumentCollection=arguments) />
+		<cfset arguments.isunassigned = true />
+		<cfreturn variables.userGateway.getUsers(argumentCollection=arguments) />
 	</cffunction>
 
 	<cffunction name="getUsers" output="false">

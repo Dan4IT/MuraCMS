@@ -50,7 +50,7 @@
 <cfset poweruser=$.currentUser().isSuperUser() or $.currentUser().isAdminUser()>
 <cfinclude template="js.cfm">
 <cfswitch expression="#rc.moduleID#">
-	<cfcase value="00000000000000000000000000000000003,00000000000000000000000000000000004">
+	<cfcase value="00000000000000000000000000000000003,00000000000000000000000000000000004,00000000000000000000000000000000099">
 		<cfset rc.perm=application.permUtility.getPerm(rc.moduleid,rc.siteid)>
 
 		<cfparam name="rc.sortBy" default="menutitle">
@@ -82,6 +82,8 @@
 		<cfoutput>
 			<cfif rc.moduleid eq '00000000000000000000000000000000004'>
 				<h1>#application.rbFactory.getKeyValue(session.rb,'sitemanager.formsmanager')#</h1>
+			<cfelseif rc.moduleid eq '00000000000000000000000000000000099'>
+				<h1>#application.rbFactory.getKeyValue(session.rb,'sitemanager.variationsmanager')#</h1>
 			<cfelse>
 				<h1>#application.rbFactory.getKeyValue(session.rb,'sitemanager.componentmanager')#</h1> 
 			</cfif>
@@ -114,7 +116,7 @@
 							</tr>
 						</thead>
 					</cfoutput>
-
+					
 					<tbody>
 						<cfif rc.rstop.recordcount>
 							<cfoutput query="rc.rsTop" maxrows="#rc.nextn.recordsperPage#" startrow="#rc.startrow#">
@@ -178,6 +180,9 @@
 														<i class="icon-pencil"></i>
 													</a>
 												</li>
+												<cfif rc.rstop.type eq 'Variation'>
+													<li class="preview"><a title="#application.rbFactory.getKeyValue(session.rb,"sitemanager.view")#" href="##" onclick="return preview('#rc.rstop.remoteurl#');"><i class="icon-globe"></i></a></li>
+												</cfif>
 												<li class="version-history">
 													<a title="#application.rbFactory.getKeyValue(session.rb,'sitemanager.content.versionhistory')#" href="./?muraAction=cArch.hist&contentid=#rc.rstop.ContentID#&type=#rc.rstop.type#&parentid=#rc.rstop.parentID#&topid=#esapiEncode('url',rc.topid)#&siteid=#esapiEncode('url',rc.siteid)#&moduleid=#rc.moduleid#">
 														<i class="icon-book"></i>

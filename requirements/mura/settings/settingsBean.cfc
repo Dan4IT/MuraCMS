@@ -91,6 +91,7 @@ version 2 without this exception.  You may, if you choose, apply this exception 
 <cfproperty name="displayPoolID" type="string" default=""/>
 <cfproperty name="contentPoolID" type="string" default=""/>
 <cfproperty name="categoryPoolID" type="string" default=""/>
+<cfproperty name="filePoolID" type="string" default=""/>
 <cfproperty name="feedManager" type="numeric" default="1" required="true" />
 <cfproperty name="largeImageHeight" type="string" default="AUTO" required="true" />
 <cfproperty name="largeImageWidth" type="numeric" default="600" required="true" />
@@ -99,6 +100,7 @@ version 2 without this exception.  You may, if you choose, apply this exception 
 <cfproperty name="mediumImageHeight" type="string" default="180" required="true" />
 <cfproperty name="mediumImageWidth" type="numeric" default="180" required="true" />
 <cfproperty name="sendLoginScript" type="string" default=""/>
+<cfproperty name="sendAuthCodeScript" type="string" default=""/>
 <cfproperty name="mailingListConfirmScript" type="string" default=""/>
 <cfproperty name="reminderScript" type="string" default=""/>
 <cfproperty name="ExtranetPublicRegNotify" type="string" default=""/>
@@ -189,6 +191,7 @@ version 2 without this exception.  You may, if you choose, apply this exception 
 	<cfset variables.instance.DisplayPoolID=""/>
 	<cfset variables.instance.ContentPoolID=""/>
 	<cfset variables.instance.CategoryPoolID=""/>
+	<cfset variables.instance.FilePoolID=""/>
 	<cfset variables.instance.feedManager=1/>
 	<cfset variables.instance.largeImageHeight='AUTO'/>
 	<cfset variables.instance.largeImageWidth='600'/>
@@ -197,6 +200,7 @@ version 2 without this exception.  You may, if you choose, apply this exception 
 	<cfset variables.instance.mediumImageHeight='180'/>
 	<cfset variables.instance.mediumImageWidth='180'/>
 	<cfset variables.instance.sendLoginScript=""/>
+	<cfset variables.instance.sendAuthCodeScript=""/>
 	<cfset variables.instance.mailingListConfirmScript=""/>
 	<cfset variables.instance.publicSubmissionApprovalScript=""/>
 	<cfset variables.instance.reminderScript=""/>
@@ -240,6 +244,7 @@ version 2 without this exception.  You may, if you choose, apply this exception 
 	<cfset variables.instance.RemotePort=80/>
 	<cfset variables.instance.resourceSSL=0/>
 	<cfset variables.instance.resourceDomain=""/>
+	<cfset variables.instance.displayObjectLookup={}/>
 
 	<cfreturn this />
 </cffunction>
@@ -697,9 +702,11 @@ version 2 without this exception.  You may, if you choose, apply this exception 
 <cffunction name="getLocaleUtils" returntype="any" access="public" output="false">
 	<cfreturn getRBFactory().getUtils() />
 </cffunction>
-s
+
 <cffunction name="getAssetPath" returntype="any" access="public" output="false">
-	<cfreturn getResourcePath() & "/#variables.instance.displayPoolID#" />
+	<cfargument name="complete" default=0>
+	<cfargument name="domain" default="#getValue('domain')#">
+	<cfreturn getResourcePath(argumentCollection=arguments) & "/#variables.instance.displayPoolID#" />
 </cffunction>
 
 <cffunction name="getIncludePath" returntype="any" access="public" output="false">
@@ -712,13 +719,15 @@ s
 
 <cffunction name="getThemeAssetPath" returntype="any" access="public" output="false">
 	<cfargument name="theme" default="#request.altTheme#">
-	
+	<cfargument name="complete" default=0>
+	<cfargument name="domain" default="#getValue('domain')#">
+
 	<cfif len(arguments.theme) and directoryExists(getTemplateIncludeDir(arguments.theme))>
-		<cfreturn getAssetPath() & "/includes/themes/#arguments.theme#" />
+		<cfreturn getAssetPath(argumentCollection=arguments) & "/includes/themes/#arguments.theme#" />
 	<cfelseif len(variables.instance.theme)>
-		<cfreturn  getAssetPath() & "/includes/themes/#variables.instance.theme#" />
+		<cfreturn  getAssetPath(argumentCollection=arguments) & "/includes/themes/#variables.instance.theme#" />
 	<cfelse>
-		<cfreturn getAssetPath() />
+		<cfreturn getAssetPath(argumentCollection=arguments) />
 	</cfif>
 </cffunction>
 
@@ -726,7 +735,7 @@ s
 	<cfargument name="theme" default="#request.altTheme#">
 	
 	<cfif len(arguments.theme) and directoryExists(getTemplateIncludeDir(arguments.theme))>
-		<cfreturn "#getIncludePath()#/includes/themes/#theme#" />
+		<cfreturn "#getIncludePath()#/includes/themes/#arguments.theme#" />
 	<cfelseif len(variables.instance.theme)>
 		<cfreturn "#getIncludePath()#/includes/themes/#variables.instance.theme#" />
 	<cfelse>
@@ -878,15 +887,11 @@ s
 
 <cffunction name="getContentRenderer" output="false">
 <cfargument name="$" default="">
-<cfif not isObject(arguments.$)>
 	<cfif not isObject(variables.instance.contentRenderer)>
 		<cfset arguments.$=getBean("$").init(getValue('siteid'))>
-		<cfset variables.instance.contentRenderer=arguments.$.getContentRenderer()>
+		<cfset variables.instance.contentRenderer=arguments.$.getContentRenderer(force=true)>
 	</cfif>
 	<cfreturn variables.instance.contentRenderer>
-<cfelse>
-	<cfreturn arguments.$.getContentRenderer()>
-</cfif>
 </cffunction>
 
 <cffunction name="getApi" output="false">
@@ -900,8 +905,7 @@ s
 </cffunction>
 
 <cffunction name="getThemeRenderer" output="false" hint="deprecated: use getContentRenderer()">
-<cfargument name="$" default="">
-	<cfreturn getContentRenderer(arguments.$)>
+	<cfreturn getContentRenderer()>
 </cffunction>
 
 <cffunction name="exportHTML" output="false">
@@ -1051,7 +1055,7 @@ s
 <cffunction name="getServerPort" output="false">
 	<cfif getValue('isRemote')>
 		<cfset var port=getValue('RemotePort')>
-		<cfif isNumeric(port) and port neq 80>
+		<cfif isNumeric(port) and !ListFind('80,443', port)>
 			<cfreturn ":" & port>
 		<cfelse>
 			<cfreturn "">
@@ -1068,11 +1072,17 @@ s
 <cffunction name="getWebPath" output="false">
 	<cfargument name="secure" default="#getValue('useSSL')#">
 	<cfargument name="complete" default=0>
+	<cfargument name="domain" default="#getValue('domain')#">
+
+	<cfif not isDefined('arguments.domain')>
+		<cfset arguments.domain=getValue('domain')>
+	</cfif>
+	
 	<cfif arguments.secure or arguments.complete>
 		<cfif arguments.secure>
-			<cfreturn 'https://' & getValue('domain') & getServerPort() & getContext()>
+			<cfreturn 'https://' & arguments.domain & getServerPort() & getContext()>
 		<cfelse>
-			<cfreturn getScheme() & '://' & getValue('domain') & getServerPort() & getContext()>
+			<cfreturn getScheme() & '://' & arguments.domain & getServerPort() & getContext()>
 		</cfif>
 	<cfelse>
 		<cfreturn getContext()>
@@ -1082,6 +1092,12 @@ s
 
 <cffunction name="getResourcePath" output="false">
 	<cfargument name="complete" default=0>
+	<cfargument name="domain" default="#getValue('domain')#">
+
+	<cfif not isDefined('arguments.domain')>
+		<cfset arguments.domain=getValue('domain')>
+	</cfif>
+
 	<cfif getValue('isRemote') and len(getValue('resourceDomain'))>
 		<cfset var configBean=getBean('configBean')>
 		<cfif getValue('resourceSSL')>
@@ -1127,9 +1143,12 @@ s
 	
 	<cfif len(getValue('domainAlias'))>
 		<cfloop list="#getValue('domainAlias')#" delimiters="#lineBreak#" index="i">
-			<cfset thelist = listAppend(thelist,"#getScheme()#://#i##getServerPort()#")>
-			<cfif adminSSL and not YesNoFormat(getValue('useSSL'))>
-				<cfset thelist = listAppend(thelist,"https://#i##getServerPort()#")>
+			<cfset theurl = "#i##getServerPort()#" />
+			<cfif not ListFindNoCase(thelist, '#getScheme()#://#theurl#')>
+				<cfset thelist = listAppend(thelist,"#getScheme()#://#theurl#")>
+			</cfif>
+			<cfif adminSSL and not YesNoFormat(getValue('useSSL')) and not ListFindNoCase(thelist, 'https://#theurl#')>
+				<cfset thelist = listAppend(thelist,"https://#theurl#")>
 			</cfif>	
 		</cfloop>
 	</cfif>
@@ -1140,5 +1159,28 @@ s
 <cffunction name="getVersion" output="false">
 	<cfreturn getBean('autoUpdater').getCurrentVersion(getValue('siteid'))>
 </cffunction>
+
+<cffunction name="registerDisplayObject" output="false">
+	<cfargument name="object">
+	<cfargument name="name" default="">
+	<cfargument name="displaymethod" default="">
+	<cfargument name="displayObjectFile" default="">
+	<cfargument name="configuratorInit" default="">
+	<cfargument name="configuratorJS" default="">
+	<cfset arguments.objectid=arguments.object>
+	<cfset variables.instance.displayObjectLookup['#arguments.object#']=arguments>
+	<cfreturn this>
+</cffunction>
+
+<cffunction name="hasDisplayObject" output="false">
+	<cfargument name="object">
+	<cfreturn structKeyExists(variables.instance.displayObjectLookup,'#arguments.object#')>
+</cffunction>
+
+<cffunction name="getDisplayObject" output="false">
+	<cfargument name="object">
+	<cfreturn variables.instance.displayObjectLookup['#arguments.object#']>
+</cffunction>
+
 
 </cfcomponent>

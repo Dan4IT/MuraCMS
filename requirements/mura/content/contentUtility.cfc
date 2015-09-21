@@ -527,7 +527,7 @@ version 2 without this exception.  You may, if you choose, apply this exception 
 	<cfset var sendVersionLink= variables.configBean.getNotifyWithVersionLink()>
 	<cfset var versionLink="">
 	<cfset var historyLink="">
-	<cfset var site=variables.settingsManager.getSite(arguments.siteid)>
+	<cfset var site=variables.settingsManager.getSite(arguments.contentBean.getSiteID())>
 	
 	<cfif listFind("Folder,Page,Calendar,Gallery,Link,File",arguments.contentBean.getType()) and arguments.contentBean.getContentID() neq '00000000000000000000000000000000001'>
 		<cfset crumbData=getBean('contentGateway').getCrumblist(arguments.contentBean.getParentID(),arguments.contentBean.getSiteID())>
@@ -928,10 +928,15 @@ Sincerely,
 	<cfset var contentBean = "">
 	<cfset var contentBeanParent = "">
 	<cfset var contentHistID = "">
-	<cfset var pluginEvent = createObject("component","mura.event").init(arguments) />
+	<cfset var pluginEvent = getBean('$').init(arguments).event() />
 	<cfset var rsKids="">
 	<cfset contentBean = variables.contentDAO.readActive(arguments.contentID, arguments.siteID)>
 	
+	<!--- Can't copy node under itself --->
+	<cfif arguments.contentid eq arguments.parentID>
+		<cfreturn contentBean>
+	</cfif>
+
 	<!--- This makes sure that all extended data is loaded --->
 	<cfset contentBean.getAllValues()>
 	
@@ -1016,7 +1021,7 @@ Sincerely,
 		where baseid='#contentHistID#' 
 	</cfquery>
 	--->
-	<cfset getBean('contentDAO').persistVersionedObjects(variables.contentDAO.readActive(arguments.contentID, arguments.siteID),contentBean,[],[])>
+	<cfset getBean('contentDAO').persistVersionedObjects(variables.contentDAO.readActive(arguments.contentID, arguments.siteID),contentBean,[],[],pluginEvent.getValue('MuraScope'))>
 
 	<cfset pluginEvent.setValue("contentBean",contentBean)>
 	<cfset getPluginManager().announceEvent("onContentCopy",pluginEvent)>

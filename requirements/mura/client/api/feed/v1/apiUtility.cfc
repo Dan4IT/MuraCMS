@@ -28,11 +28,13 @@
 		}
 		*/
 		
-		if(configBean.getIndexfileinurls()){
+		//if(configBean.getIndexfileinurls()){
 			variables.endpoint="#site.getResourcePath(complete=1)#/index.cfm/_api/feed/v1/#variables.siteid#";	
+		/*
 		} else {
 			variables.endpoint="#site.getResourcePath(complete=1)#/_api/feed/v1/#variables.siteid#";	
 		}
+		*/
 
 		variables.config={
 			publicMethods="feed"
@@ -87,6 +89,8 @@
 			var params={};
 			var result="";
 
+			getBean('utility').suppressDebugging();
+
 			structAppend(params,url);
 			structAppend(params,form);
 			structAppend(form,params);
@@ -98,29 +102,33 @@
 
 			session.siteid=variables.siteid;	
 
-			if(pathInfo[1]=='tasks'){
-				arrayDeleteAt(pathInfo,1);
-				arrayDeleteAt(pathInfo,1);
-			} else {
-				arrayDeleteAt(pathInfo,1);
-				arrayDeleteAt(pathInfo,1);
-				arrayDeleteAt(pathInfo,1);
+			if(arrayLen(pathInfo)){
+				if(pathInfo[1]=='tasks'){
+					arrayDeleteAt(pathInfo,1);
+					arrayDeleteAt(pathInfo,1);
+				} else {
+					arrayDeleteAt(pathInfo,1);
+					arrayDeleteAt(pathInfo,1);
+					arrayDeleteAt(pathInfo,1);
+				}
 			}
-		
+			
 			if(cgi.user_agent contains "Mozilla"){
 				responseObject.setcontenttype('text/xml');
 			} else {
 				responseObject.setcontenttype('application/rss+xml');
 			}
 					
-			if(arrayLen(pathInfo)){
-				params.siteid=pathInfo[1];
+			if(arrayLen(pathInfo) && pathInfo[1]==variables.siteid){
+				arrayDeleteAt(pathInfo,1);
 			}
 			
-			if (!isDefined('params.method') && arrayLen(pathInfo) > 1 && isDefined('#pathInfo[2]#')){
-				params.method=pathInfo[2];
+			if (!isDefined('params.method') && arrayLen(pathInfo)){
+				params.method=pathInfo[1];
 			}
 			
+			//writeDump(var=params,abort=1);
+
 			if (isDefined('params.method') && isDefined('#params.method#')){
 
 				if(!listFindNoCase(variables.config.publicMethods, params.method) ){

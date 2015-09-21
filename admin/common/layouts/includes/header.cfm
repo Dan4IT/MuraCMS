@@ -368,7 +368,7 @@
 								<!--- /Dashboard --->
 
 								<!--- Site Manager --->
-									<li <cfif rc.originalcircuit eq 'cArch' and not listFind('00000000000000000000000000000000003,00000000000000000000000000000000004',rc.moduleID) and not (rc.originalfuseaction eq 'imagedetails' and isDefined('url.userID'))> class="active"</cfif>>
+									<li <cfif rc.originalcircuit eq 'cArch' and not listFind('00000000000000000000000000000000003,00000000000000000000000000000000004,00000000000000000000000000000000099',rc.moduleID) and not (rc.originalfuseaction eq 'imagedetails' and isDefined('url.userID'))> class="active"</cfif>>
 										<a href="#application.configBean.getContext()#/admin/?muraAction=cArch.list&amp;siteid=#session.siteid#&amp;moduleid=00000000000000000000000000000000000">
 											<i class="icon-list-alt"></i> 
 											<span>#rc.$.rbKey("layout.sitemanager")#</span>
@@ -555,19 +555,20 @@
 														#rc.$.rbKey('layout.deploysitebundle')#
 													</a>
 												</li>
-												<!--- /Trash Bin --->
-
-												<!--- Trash Bin --->
-												<li>
-													<a href="#application.configBean.getContext()#/admin/?muraAction=cTrash.list&amp;siteID=#esapiEncode('url',session.siteid)#">
-														<i class="icon-trash"></i> 
-														#rc.$.rbKey('layout.trashbin')#
-													</a>
-												</li>
-												<!--- /Trash Bin --->
+												<!--- /Deploy Site Bundle --->
 
 												<!--- Update Site --->
 												<cfif listFind(session.mura.memberships,'S2')>
+													<!--- Trash Bin --->
+													<li>
+														<a href="#application.configBean.getContext()#/admin/?muraAction=cTrash.list&amp;siteID=#esapiEncode('url',session.siteid)#">
+															<i class="icon-trash"></i> 
+															#rc.$.rbKey('layout.trashbin')#
+														</a>
+													</li>
+													<!--- /Trash Bin --->
+
+
 													<cfif (not isBoolean(application.configBean.getAllowAutoUpdates()) or application.configBean.getAllowAutoUpdates()) and isDefined('rc.currentUser.renderCSRFTokens')>
 														<li>
 															<a href="##" onclick="confirmDialog('WARNING: Do not update your site files unless you have backed up your current siteID directory.',function(){actionModal('#application.configBean.getContext()#/admin/?muraAction=cSettings.editSite&amp;siteid=#esapiEncode('url',session.siteid)#&amp;action=updateFiles#rc.$.renderCSRFTokens(context=session.siteid & 'updatesite',format='url')#')});return false;">

@@ -71,6 +71,8 @@ version 2 without this exception.  You may, if you choose, apply this exception 
 	<cfset variables.instance.sortDirection="asc" />
 	<cfset variables.instance.table="tusers">
 	<cfset variables.instance.entityName="user">
+	<cfset variables.instance.fieldAliases={'tag'={field='tuserstags.tag',datatype='varchar'}}/>
+	<cfset variables.instance.cachedWithin=createTimeSpan(0,0,0,0)/>
 	
 	<cfset variables.instance.params=queryNew("param,relationship,field,condition,criteria,dataType","integer,varchar,varchar,varchar,varchar,varchar" )  />
 	<cfreturn this/>
@@ -147,6 +149,8 @@ version 2 without this exception.  You may, if you choose, apply this exception 
 </cffunction>
 
 <cffunction name="getQuery" returntype="query" output="false">
+	<cfargument name="cachedWithin" required="true" default="#variables.instance.cachedWithin#">
+	<cfset variables.instance.cachedWithin=arguments.cachedWithin>
 	<cfif not len(variables.instance.siteID)>
 		<cfthrow message="The 'SITEID' value must be set in order to search users.">
 	</cfif>
@@ -154,7 +158,8 @@ version 2 without this exception.  You may, if you choose, apply this exception 
 </cffunction>
 
 <cffunction name="getIterator" returntype="any" output="false">
-	<cfset var rs=getQuery()>
+	<cfargument name="cachedWithin" required="true" default="#variables.instance.cachedWithin#">
+	<cfset var rs=getQuery(argumentCollection=arguments)>
 	<cfset var it=getBean("userIterator")>
 	<cfset it.setQuery(rs,variables.instance.nextN)>
 	<cfreturn it>
@@ -170,9 +175,7 @@ version 2 without this exception.  You may, if you choose, apply this exception 
 
 <cffunction name="setIsPublic" output="false">
 	<cfargument name="isPublic">
-	<cfif isNumeric(arguments.isPublic)>
-		<cfset variables.instance.isPublic=arguments.isPublic>
-	</cfif>
+	<cfset variables.instance.isPublic=arguments.isPublic>
 	<cfreturn this>
 </cffunction>
 
@@ -180,6 +183,10 @@ version 2 without this exception.  You may, if you choose, apply this exception 
 	<cfargument name="type">
 	<cfif isNumeric(arguments.type)>
 		<cfset variables.instance.type=arguments.type>
+	<cfelseif arguments.type eq 'user'>
+		<cfset variables.instance.type=2>
+	<cfelseif arguments.type eq 'group'>
+		<cfset variables.instance.type=1>
 	</cfif>
 	<cfreturn this>
 </cffunction>
@@ -220,6 +227,10 @@ version 2 without this exception.  You may, if you choose, apply this exception 
 
 <cffunction name="getAvailableCount" output="false">
 	<cfreturn getQuery(countOnly=true).count>
+</cffunction>
+
+<cffunction name="clone" output="false">
+	<cfreturn getBean("userFeed").setAllValues(structCopy(getAllValues()))>
 </cffunction>
  
 </cfcomponent>

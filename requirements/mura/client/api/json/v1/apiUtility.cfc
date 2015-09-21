@@ -31,13 +31,16 @@ component extends="mura.cfobject" {
 		} else {
 			var protocol="http://";
 		}
+		
 		*/
 
-		if(configBean.getIndexfileinurls()){
+		//if(configBean.getIndexfileinurls()){
 			variables.endpoint="#site.getResourcePath(complete=1)#/index.cfm/_api/json/v1/#variables.siteid#";	
+		/*
 		} else {
 			variables.endpoint="#site.getResourcePath(complete=1)#/_api/json/v1/#variables.siteid#";	
 		}
+		*/
 		
 		variables.config={
 			linkMethods=[],
@@ -56,6 +59,14 @@ component extends="mura.cfobject" {
 	      .asString('url')
 	      .asDate('start')
 	      .asDate('end')
+	      .asInteger('startindex')
+	      .asInteger('endindex')
+	      .asInteger('itemsperpage')
+	      .asInteger('endindex')
+	      .asInteger('totalpages')
+	      .asInteger('totalitems')
+	      .asInteger('pageindex')
+	      .asInteger('code')
 	      .asString('title');
 
 	    registerEntity('site',{
@@ -69,7 +80,6 @@ component extends="mura.cfobject" {
 			fields="parentid,moduleid,path,contentid,contenthistid,changesetid,siteid,active,approved,title,menutitle,summary,tags,type,subtype,displayStart,displayStop,display,filename,url,assocurl,isNew"
 		});
 
-		registerEntity('content',{public=true});
 		registerEntity('user',{public=false,moduleid='00000000000000000000000000000000008'});
 		registerEntity('group',{public=false,moduleid='00000000000000000000000000000000008'});
 		registerEntity('address',{public=false,moduleid='00000000000000000000000000000000008'});
@@ -77,6 +87,7 @@ component extends="mura.cfobject" {
 		registerEntity('feed',{public=true,moduleid='00000000000000000000000000000000011'});
 		registerEntity('category',{public=true,moduleid='00000000000000000000000000000000010'});
 		registerEntity('comment',{public=true,moduleid='00000000000000000000000000000000015'});
+		registerEntity('stats',{public=true,moduleid='00000000000000000000000000000000000'});
 
 		return this;
 	}
@@ -94,12 +105,12 @@ component extends="mura.cfobject" {
 		return this;
 	}
 
-	function getEntityConfig(){
-		if(structKeyExists(variables.config.entities,arguments.entityName)){
-			return variables.config;
-		} else {
-			return {};
-		}
+	function getEntityConfig(entityName){
+		if(!structKeyExists(variables.config.entities,arguments.entityName)){
+			variables.config.entities[arguments.entityName]={public=false};
+		} 
+		
+		return variables.config.entities[arguments.entityName];
 	}
 
 	function registerMethod(methodName, method){
@@ -110,6 +121,12 @@ component extends="mura.cfobject" {
 		if(isDefined('arguments.method')){
 			injectMethod(arguments.methodName,arguments.method);
 		}
+
+		return this;
+	}
+
+	function registerDisplayObject(displayObjectName, config){
+		variables.config['#arguments.displayObjectName#']=arguments.config;
 
 		return this;
 	}
@@ -151,12 +168,90 @@ component extends="mura.cfobject" {
 		return {'items'=arguments._array};
 	}
 
+	function formatIteratorResult(iterator,returnArray,method){
+		var result={};
+
+		if(arguments.iterator.getRecordCount()){
+			result={'totalItems'=arguments.iterator.getRecordCount(),
+			'totalPages'=arguments.iterator.pageCount(),
+			'pageIndex'=arguments.iterator.getPageIndex(),
+			'items'=arguments.returnArray,
+			'startindex'=arguments.iterator.getFirstRecordOnPageIndex(),
+			'endindex'=arguments.iterator.getLastRecordOnPageIndex(),
+			'itemsperpage'=arguments.iterator.getNextN()
+		};
+		} else {
+			result={'totalItems'=0,
+			'totalPages'=0,
+			'pageIndex'=0,
+			'items'=[],
+			'startindex'=0,
+			'endindex'=0,
+			'itemsperpage'=arguments.iterator.getNextN()
+		};
+		}
+		
+		
+		var baseURL=getEndPoint() & "/?";
+		var params={};
+		structAppend(params,url,true);
+		structAppend(params,form,true);
+		param name="params.method" default=arguments.method;
+
+		if(params.method=='undefined'){
+			params.method=arguments.method;
+		}
+
+		for(var u in params){
+			if(u!='pageIndex'){
+				baseURL= baseurl & "&#lcase(u)#=#params[u]#";
+			}
+		}
+
+		var nextIndex = (result.pageIndex < result.totalPages) ? result.pageIndex+1 : 1;
+		var prevIndex =(result.pageIndex > 1) ? result.pageIndex-1 : result.totalPages;
+
+		result.links={'self'=baseurl & "&pageIndex=" & result.pageIndex};
+
+		if(result.pageIndex > 1){
+			result.links['first']='first'=baseurl & "&pageIndex=" & 1;
+			result.links['previous']=baseurl & "&pageIndex=" & prevIndex;
+		}
+
+		if(result.totalPages > 1){
+			result.links['last']=baseurl & "&pageIndex=" & result.totalPages;
+		}
+
+		if(result.pageIndex < result.totalPages ){
+			result.links['next']=baseurl & "&pageIndex=" & nextIndex;
+		}
+				
+		return result;
+	}
+
 	function processRequest(path=cgi.path_info){
 
 		try {
 			var responseObject=getpagecontext().getResponse();
 			var params={};
 			var result="";
+
+			getBean('utility').suppressDebugging();
+
+			var headers = getHttpRequestData().headers;
+			
+			
+			if( structKeyExists( headers, 'Origin' )){
+				
+			  	var origin =  headers['Origin'];;
+			  	var PC = getpagecontext().getresponse();
+			 
+			  	// If the Origin is okay, then echo it back, otherwise leave out the header key
+			  	if(listFindNoCase(application.settingsManager.getAccessControlOriginList(), origin )) {
+			   		PC.setHeader( 'Access-Control-Allow-Origin', origin );
+			   		PC.setHeader( 'Access-Control-Allow-Credentials', 'true' );
+			  	}
+		  	}
 
 			structAppend(params,url);
 			structAppend(params,form);
@@ -167,7 +262,7 @@ component extends="mura.cfobject" {
 			var method="GET";
 			var httpRequestData=getHTTPRequestData();
 
-			session.siteid=variables.siteid;
+			param name="session.siteid" default=variables.siteid;
 
 			arrayDeleteAt(pathInfo,1);
 			arrayDeleteAt(pathInfo,1);
@@ -185,7 +280,7 @@ component extends="mura.cfobject" {
 					throw(type="invalidMethodCall");
 				}
 
-				if(!(listFindNoCase('validate,processAsyncObject',params.method) || getBean('settingsManager').getSite(variables.siteid).getJSONApi())){
+				if(!(listFindNoCase('validate,processAsyncObject,generateCSRFTokens',params.method) || getBean('settingsManager').getSite(variables.siteid).getJSONApi())){
 					throw(type='authorization');
 				}
 
@@ -197,7 +292,7 @@ component extends="mura.cfobject" {
 					result=evaluate('#params.method#(argumentCollection=params)');
 					
 					if(!isJson(result)){
-						result=getSerializer().serialize({'data'=result});
+						result=getSerializer().serialize({'apiversion'=getApiVersion(),'method'=params.method,'params'=getParamsWithOutMethod(params),'data'=result});
 					}
 
 					responseObject.setContentType('application/json; charset=utf-8');
@@ -206,8 +301,12 @@ component extends="mura.cfobject" {
 				}
 			}
 
+			if(!isDefined('params.method')){
+				params.method="undefined";
+			}
+
 			if(!getBean('settingsManager').getSite(variables.siteid).getJSONApi()){
-				throw(type='authorization');
+				throw(type='disabled');
 			}
 
 			if(arrayLen(pathInfo)){
@@ -233,7 +332,7 @@ component extends="mura.cfobject" {
 					result=evaluate('#params.method#(argumentCollection=params)');
 					
 					if(!isJson(result)){
-						result=getSerializer().serialize({'data'=result});
+						result=getSerializer().serialize({'apiversion'=getApiVersion(),'method'=params.method,'params'=getParamsWithOutMethod(params),'data'=result});
 					}
 
 					responseObject.setContentType('application/json; charset=utf-8');
@@ -250,7 +349,10 @@ component extends="mura.cfobject" {
 				params.entityConfigName="contentnav";
 			}
 
-			if(!isDefined("params.siteid") || !(isDefined("params.entityName") && len(params.entityName) && getServiceFactory().containsBean(params.entityName)) ){
+			if(isDefined("params.siteid") && !isDefined('params.entityName')){
+				params.entityName='entityname';
+				params.method='findall';
+			} else if(!isDefined("params.siteid") || !(isDefined("params.entityName") && len(params.entityName) && getServiceFactory().containsBean(params.entityName)) ){
 				if(isDefined('params.entityName') && right(params.entityName,1) == 's'){
 					params.entityName=left(params.entityName,len(params.entityName)-1);
 
@@ -279,7 +381,6 @@ component extends="mura.cfobject" {
 			} else {
 
 				if(arrayLen(pathInfo) > 2){
-				
 					if(len(pathInfo[3])==35){
 						params.id=pathInfo[3];
 
@@ -294,19 +395,26 @@ component extends="mura.cfobject" {
 					} else if (params.entityName=='content') {
 						params.id=pathInfo[3];
 						var filenamestart=3;
-
+						
 						if(pathInfo[3]=='_path'){
 							params.render=true;
+							params.variation=false;
 							params.id='';
 							filenamestart=4;
-						} 
+						} else if(pathInfo[3]=='_variation'){
+							params.render=true;
+							params.variation=true;
+							params.id='';
+							filenamestart=4;
+						} 				
 
-						if(arrayLen(pathInfo) > filenamestart){
+						if(arrayLen(pathInfo) >= filenamestart){
 							for(var i=filenamestart;i<=arrayLen(pathInfo);i++){
 								params.id=listAppend(params.id,pathInfo[i],'/');
 							}
 						}
-
+					}else if(pathInfo[3]=='new'){
+						params.id=pathInfo[3];
 					} else{
 						parseparamsFromPath(pathInfo,params,3);
 					}
@@ -327,6 +435,8 @@ component extends="mura.cfobject" {
 				var primaryKey='userid';
 			} else if(params.entityName=="feed"){
 				var primaryKey='feedid';
+			} else if(params.entityName=="entityname"){
+				var primaryKey='notvalid';
 			} else {
 				var primaryKey=application.objectMappings['#params.entityName#'].primaryKey;
 			}
@@ -356,7 +466,7 @@ component extends="mura.cfobject" {
 
 							if(listFindNoCase('content,category',params.entityName) && params.relatedEntity=='crumbs'){
 								responseObject.setContentType('application/json; charset=utf-8');
-								return getSerializer().serialize({'data'=findCrumbArray(argumentCollection=params)});
+								result=findCrumbArray(argumentCollection=params);
 							} else {
 								if(!isDefined('params.relationship.cfc')){
 									throw(type='invalidParameters');
@@ -368,32 +478,44 @@ component extends="mura.cfobject" {
 								structAppend(url,params);
 
 								if(params.relationship.fieldtype=='one-to-many'){
+									params.method='findQuery';
 									result=findQuery(argumentCollection=params);
 								} else {
 									if(listLen(params.id)){
 										params.ids=params.id;
+										params.method='findMany';
 										result=findMany(argumentCollection=params);
 									} else if(params.id=='new') {
+										params.method='findNew';
 										result=findNew(argumentCollection=params);
 									} else {
+										params.method='findOne';
 										result=findOne(argumentCollection=params);
 									}	
 								}
 								
 							}
 						} else {
-							if(listLen(params.id) > 1){
+							if(params.id=='new') {
+								params.method='findNew';
+								result=findNew(argumentCollection=params);
+							} else if(listLen(params.id) > 1){
 								params.ids=params.id;
+								params.method='findMany';
 								result=findMany(argumentCollection=params);
 							} else {
+								params.method='findOne';
 								result=findOne(argumentCollection=params);
 							}
 						}
 
 					} else {
+
 						if(structCount(url)){
+							params.method='findQuery';
 							result=findQuery(argumentCollection=params);
 						} else {
+							params.method='findAll';
 							result=findAll(argumentCollection=params);
 						}
 					}
@@ -402,12 +524,13 @@ component extends="mura.cfobject" {
 
 				case "PUT":
 				case "POST":
-
+					params.method='save';
 					result=save(argumentCollection=params);
 
 				break;
 
 				case "DELETE":
+					params.method='delete';
 					result=delete(argumentCollection=params);
 			}
 
@@ -418,46 +541,63 @@ component extends="mura.cfobject" {
 			} catch (Any e){}
 
 			responseObject.setContentType('application/json; charset=utf-8');
-			return getSerializer().serialize({'data'=result});
+			return getSerializer().serialize({'apiversion'=getApiVersion(),'method'=params.method,'params'=getParamsWithOutMethod(params),'data'=result});
 		} 
 
 		catch (authorization e){
 			responseObject.setContentType('application/json; charset=utf-8');
 			responseObject.setStatus(401);
-			return getSerializer().serialize({'error'={'message'='Insufficient Account Permissions'}});
+			return getSerializer().serialize({'apiversion'=getApiVersion(),'method'=params.method,'params'=getParamsWithOutMethod(params),'error'={code=401,'message'='Insufficient Account Permissions'}});
+		}
+
+		catch (disabled e){
+			responseObject.setContentType('application/json; charset=utf-8');
+			responseObject.setStatus(400);
+			return getSerializer().serialize({'apiversion'=getApiVersion(),'method'=params.method,'params'=getParamsWithOutMethod(params),'error'={code=400,'message'='The JSON API is currently disabled'}});
 		}
 
 		catch (invalidParameters e){
 			responseObject.setContentType('application/json; charset=utf-8');
 			responseObject.setStatus(400);
-			return getSerializer().serialize({'error'={'message'='Insufficient parameters'}});
+			return getSerializer().serialize({'apiversion'=getApiVersion(),'method'=params.method,'params'=getParamsWithOutMethod(params),'error'={code=400,'message'='Insufficient parameters'}});
 		}
 
 		catch (invalidMethodCall e){
 			responseObject.setContentType('application/json; charset=utf-8');
 			responseObject.setStatus(400);
-			return getSerializer().serialize({'error'={'message'="Invalid method call"}});
+			return getSerializer().serialize({'apiversion'=getApiVersion(),'method'=params.method,'params'=getParamsWithOutMethod(params),'error'={code=400,'message'="Invalid method call"}});
 		}
 
 		catch (badRequest e){
 			responseObject.setContentType('application/json; charset=utf-8');
 			responseObject.setStatus(400);
-			return getSerializer().serialize({'error'={'message'="Bad Request"}});
+			return getSerializer().serialize({'apiversion'=getApiVersion(),'method'=params.method,'params'=getParamsWithOutMethod(params),'error'={code=400,'message'="Bad Request"}});
 		}
 
 		catch (invalidTokens e){
 			responseObject.setContentType('application/json; charset=utf-8');
 			responseObject.setStatus(400);
-			return getSerializer().serialize({'error'={'message'="Invalid CSRF tokens"}});
+			return getSerializer().serialize({'apiversion'=getApiVersion(),'method'=params.method,'params'=getParamsWithOutMethod(params),'error'={code=400,'message'="Invalid CSRF tokens"}});
 		}
 
 		catch (Any e){
 			writeLog(type="Error", file="exception", text="#e.stacktrace#");
 			responseObject.setContentType('application/json; charset=utf-8');
 			responseObject.setStatus(500);
-			return getSerializer().serialize({'error'={'message'="Unhandeld Exception",'stacktrace'=e}});
+			return getSerializer().serialize({'apiversion'=getApiVersion(),'method'=params.method,'params'=getParamsWithOutMethod(params),'error'={code=500,'message'="Unhandeld Exception",'stacktrace'=e}});
 		}
 
+	}
+
+	function getApiVersion(){
+		return 'v1';
+	}
+
+	function getParamsWithOutMethod(params){
+		var temp={};
+		structAppend(temp,arguments.params);
+		structDelete(temp,'method');
+		return temp;
 	}
 
 	function parseParamsFromPath(pathInfo,params,start){
@@ -479,7 +619,7 @@ component extends="mura.cfobject" {
 
 	function getRelationship(from,to){
 		if(isDefined("application.objectMappings.#arguments.from#")){
-			//writeDump(var= application.objectMappings['#arguments.from#'].hasMany,abort=1);
+			
 			for(var p in application.objectMappings['#arguments.from#'].hasOne){
 				if(p.name==arguments.to || p.cfc==arguments.to){
 					return p;
@@ -501,7 +641,7 @@ component extends="mura.cfobject" {
 		return (isDefined('session.siteid') && isDefined('session.mura.requestcount') && session.mura.requestcount > 1);
 	}
 
-	function AllowAccess(bean,$){
+	function AllowAccess(bean,$,throwError=true){
 
 		if(isObject(arguments.bean)){
 			if(!isDefined('arguments.bean.getEntityName')){
@@ -510,7 +650,10 @@ component extends="mura.cfobject" {
 			var entityName=arguments.bean.getEntityName();
 		} else {
 			if(!getServiceFactory().containsBean(arguments.bean)){
-				throw(type='invalidParameters');
+				if(arguments.throwError){
+					throw(type='invalidParameters');
+				}
+				return false;
 			}
 			var entityName=arguments.bean;
 		}
@@ -546,11 +689,15 @@ component extends="mura.cfobject" {
 			throw(type='invalidParameters');
 		}
 
+		if(arguments.bean.getEntityName() == 'content' && listFindNoCase('Form,Component,Variation',arguments.$.event('type'))){
+			arguments.bean.setType($.event('type'));
+		}
+
 		switch(arguments.bean.getEntityName()){
 			case 'content':
 				switch(arguments.bean.getType()){
 					case 'Form':	
-						if(!getBean('permUtility').getModulePerm('00000000000000000000000000000000000',variables.siteid)){
+						if(!getBean('permUtility').getModulePerm('00000000000000000000000000000000004',variables.siteid)){
 							return false;
 						}
 					break;
@@ -559,8 +706,13 @@ component extends="mura.cfobject" {
 							return false;
 						}
 					break;
+					case 'Variation':
+						if(!getBean('permUtility').getModulePerm('00000000000000000000000000000000099',variables.siteid)){
+							return false;
+						}
+					break;
 					default:	
-						if(!getBean('permUtility').getModulePerm('00000000000000000000000000000000004',variables.siteid)){
+						if(!getBean('permUtility').getModulePerm('00000000000000000000000000000000000',variables.siteid)){
 							return false;
 						}
 					break;
@@ -573,9 +725,9 @@ component extends="mura.cfobject" {
 					local.crumbData=arguments.bean.getCrumbArray(); 
 					local.perm=getBean('permUtility').getNodePerm(local.crumbData);
 				}
-				 
-				if(local.currentBean.getIsNew() && len(local.currentBean.getParentID())){
-					local.crumbData=getBean('contentGateway').getCrumblist(arguments.bean.getParentID(), arguments.bean.getSiteID());
+
+				if(local.currentBean.getIsNew() && len(arguments.bean.getParentID())){
+					local.crumbData=getBean('contentGateway').getCrumblist(arguments.bean.getParentID(), arguments.bean.getSiteID());	
 					local.perm=getBean('permUtility').getNodePerm(local.crumbData);  
 				}
 				 
@@ -632,7 +784,7 @@ component extends="mura.cfobject" {
 		var result=httpService.send().getPrefix();
 
 		try{
-			var response=degetSerializer().serialize(result.filecontent);
+			var response=getSerializer().serialize(result.filecontent);
 		} catch(any e){
 			var response={status='invalid'};
 		}
@@ -698,7 +850,7 @@ component extends="mura.cfobject" {
 
 		var $=getBean('$').init(arguments.siteid);
 
-		var entity=$.getBean(arguments.entityName);
+		var entity=$.getBean(arguments.entityName).set($.event().getAllValues());
 
 		if(!allowAction(entity,$)){
 			throw(type="authorization");
@@ -714,16 +866,33 @@ component extends="mura.cfobject" {
 
 		if(arguments.entityName=='content' && len($.event('contenthistid'))){
 			var loadByparams={contenthistid=$.event('contenthistid')};
+			if($.event('type')=='Variation'){
+				$.event('body',urlDecode($.event('body')));
+			}
 		} else {
 			var loadByparams={'#pk#'=arguments.id};
 		}
 
 		if($.validateCSRFTokens(context=arguments.id)){
-			entity.loadBy(argumentCollection=loadByparams)
-				.set(
-					$.event().getAllValues()
-				)
-				.save();
+			if(arguments.entityName=='content' && $.event('type')=='Variation'){
+				entity.loadBy(argumentCollection=loadByparams).set(
+						$.event().getAllValues()
+					);
+
+				if(entity.getIsNew() && len(entity.getChangesetID())){
+					//create default that is not in changeset
+					entity.setBody("[]").setChangesetID('').setApproved(1).save();
+					entity.setBody($.event('body')).setChangesetID($.event('changesetid')).setApproved(0).save();
+				} else {
+					entity.save();
+				}
+			} else {
+				entity.loadBy(argumentCollection=loadByparams)
+					.set(
+						$.event().getAllValues()
+					)
+					.save();
+			}
 		} else {
 			throw(type="invalidTokens");
 		}
@@ -744,10 +913,13 @@ component extends="mura.cfobject" {
 		returnStruct.links=getLinks(entity);
 		returnStruct.id=returnStruct[pk];
 	
-		/*
-		var tokens=$.generateCSRFTokens(context=returnStruct.id);
-		structAppend(returnStruct,{csrf_token=tokens.token,csrf_token_expires='#tokens.expires#'});
-		*/
+		if(listFindNoCase('content,contentnav',arguments.entityName)){
+			returnstruct.images=setImageURLS(entity,$);
+			returnstruct.url=entity.getURL();
+		}
+
+		//var tokens=$.generateCSRFTokens(context=returnStruct.id);
+		//structAppend(returnStruct,{csrf_token=tokens.token,csrf_token_expires='#tokens.expires#'});
 		
 		return returnStruct;
 	}
@@ -791,7 +963,7 @@ component extends="mura.cfobject" {
 
 			vals=temp;
 		} else {
-			vals=arguments.entity.getAllValues(expand=arguments.expand);
+			vals=structCopy(arguments.entity.getAllValues(expand=arguments.expand));
 			structDelete(vals,'addObjects');
 			structDelete(vals,'removeObjects');
 			structDelete(vals,'frommuracache');
@@ -799,23 +971,51 @@ component extends="mura.cfobject" {
 			structDelete(vals,'instanceid');
 			structDelete(vals,'primaryKey');
 			structDelete(vals,'extenddatatable');
+			structDelete(vals,'extenddata');
+			structDelete(vals,'extendAutoComplete');
+			if(listFindNoCase("user,group",entityConfigName)){
+				structDelete(vals,'sourceiterator');
+				structDelete(vals,'ukey');
+				structDelete(vals,'hkey');
+				structDelete(vals,'passedprotect');
+				structDelete(vals,'extendsetid');
+				structDelete(vals,'extenddata');
+				structDelete(vals,'addresses');
+			}
 		}
+
+		vals['entityname']=entityConfigName;
 
 		return vals;
 	}
 
-	function findOne(entityName,id,siteid,render=false){
+	function findOne(entityName,id,siteid,render=false,variation=false){
 		var $=getBean('$').init(arguments.siteid);
 		
 		if(arguments.entityName=='content'){
 			var pk = 'contentid';
-			if(arguments.render){
-				if(arguments.id=='null'){
-					arguments.id='';
-				}
 
-				getBean('contentServer').renderFilename(filename=arguments.id,siteid=arguments.siteid,validateDomain=false);		
-		
+			if(arguments.render){	
+				if(arguments.variation){	
+					var content=$.getBean('content').loadBy(remoteid=id);
+					
+					url.linkservid=content.getContentID();
+
+					if(!content.exists()){
+						content.setType('Variation');
+						content.setIsNew(1);
+						content.setRemoteID(0);
+						content.setSiteID(arguments.siteid);
+						request.contentBean=content;
+					}
+					
+					getBean('contentServer').renderFilename(filename='',siteid=arguments.siteid,validateDomain=false);
+				} else {
+					if(arguments.id=='null'){
+						arguments.id='';
+					}
+					getBean('contentServer').renderFilename(filename=arguments.id,siteid=arguments.siteid,validateDomain=false);		
+				}
 
 			} else {
 				if(len($.event('contenthistid'))){
@@ -824,6 +1024,12 @@ component extends="mura.cfobject" {
 					var entity=$.getBean('content').loadBy(contentid=arguments.id);	
 				}
 			}
+		} else if(arguments.entityName=='stats'){
+			entity=getBean("stats");
+			entity.setSiteID(arguments.siteid);
+			entity.setContentID(arguments.id);
+			entity.load();
+			pk='contentid';
 
 		} else {
 			var entity=$.getBean(arguments.entityName);
@@ -843,20 +1049,17 @@ component extends="mura.cfobject" {
 		}
 
 		var returnStruct=getFilteredValues(entity,$);
+		returnStruct.links=getLinks(entity);		
+		returnStruct.id=returnStruct[pk];
 
 		if(listFindNoCase('content,contentnav',arguments.entityName)){
 			returnstruct.images=setImageURLS(entity,$);
 			returnstruct.url=entity.getURL();
 		}
 
-		returnStruct.links=getLinks(entity);		
-		returnStruct.id=returnStruct[pk];
-
-		/*
-		var tokens=$.generateCSRFTokens(context=returnStruct.id);
-		structAppend(returnStruct,{csrf_token=tokens.token,csrf_token_expires='#tokens.expires#'});
-		*/
-
+		//var tokens=$.generateCSRFTokens(context=returnStruct.id);
+		//structAppend(returnStruct,{csrf_token=tokens.token,csrf_token_expires='#tokens.expires#'});
+	
 		return returnStruct;
 	}
 
@@ -879,21 +1082,34 @@ component extends="mura.cfobject" {
 		}
 
 		var returnStruct=getFilteredValues(entity,$);
+		returnStruct.links=getLinks(entity);		
+		returnStruct.id=returnStruct[pk];
 
 		if(listFindNoCase('content,contentnav',arguments.entityName)){
 			returnstruct.images=setImageURLS(entity,$);
 			returnstruct.url=entity.getURL();
 		}
 
-		returnStruct.links=getLinks(entity);		
-		returnStruct.id=returnStruct[pk];
-
+		//var tokens=$.generateCSRFTokens(context=returnStruct.id);
+		//structAppend(returnStruct,{csrf_token=tokens.token,csrf_token_expires='#tokens.expires#'});
+	
 		return returnStruct;
 	}
 
 	function findAll(siteid,entityName){
-		
 		var $=getBean('$').init(arguments.siteid);
+
+		if(entityName=='entityname'){
+			var returnArray=[];
+			for(var i in variables.config.entities){
+				if(allowAccess(i,$,false)){
+					arrayAppend(returnArray,{entityname=i,links={endpoint=getEndPoint() & "/" & i}});
+				}
+			}
+			return {items=returnArray,links={self=getEndPoint()},entityname='entityname'};
+		}
+
+		
 		var entity=$.getBean(arguments.entityName);
 
 		if(!allowAccess(entity,$)){
@@ -908,7 +1124,12 @@ component extends="mura.cfobject" {
 
 		setFeedProps(feed,$);
 
-		var iterator=feed.getIterator();
+		if(isBoolean($.event('countOnly')) && $.event('countOnly')){
+			return {count=feed.getAvailableCount()};
+		} else {
+			var iterator=feed.getIterator();
+			setIteratorProps(iterator,$);
+		}
 
 		if(arguments.entityName=='content'){
 			var pk="contentid";
@@ -932,23 +1153,20 @@ component extends="mura.cfobject" {
 			if(len(pk)){
 				itemStruct.id=itemStruct[pk];
 			}
+			itemStruct.links=getLinks(item);
 
 			if(listFindNoCase('content,contentnav',arguments.entityName)){
 				itemStruct.images=setImageURLS(item,$);
 				itemStruct.url=item.getURL();
 			}
 
-			itemStruct.links=getLinks(item);
-
-			/*
-			var tokens=$.generateCSRFTokens(context=itemStruct.id);
-			structAppend(itemStruct,{csrf_token=tokens.token,csrf_token_expires='#tokens.expires#'});
-			*/
-
+			//var tokens=$.generateCSRFTokens(context=itemStruct.id);
+			//structAppend(itemStruct,{csrf_token=tokens.token,csrf_token_expires='#tokens.expires#'});
+		
 			arrayAppend(returnArray, itemStruct);
 		}
 
-		return {'items'=returnArray};
+		return formatIteratorResult(iterator,returnArray,'findall');
 	}
 
 	function findMany(entityName,ids,siteid){
@@ -970,8 +1188,6 @@ component extends="mura.cfobject" {
 			}
 		}
 
-		setFeedProps(feed,$);
-
 		if($.event('entityName')=='content'){
 			var pk="contentid";
 		} else if($.event('entityName')=='feed'){
@@ -982,9 +1198,15 @@ component extends="mura.cfobject" {
 
 		feed.addParam(column=pk,criteria=arguments.ids,condition='in');
 	
-		var iterator=feed.getIterator();
+		setFeedProps(feed,$);
 
-		//writeDump(var=iterator.getQUery(),abort=1);
+		if(isBoolean($.event('countOnly')) && $.event('countOnly')){
+			return {count=feed.getAvailableCount()};
+		} else {
+			var iterator=feed.getIterator();
+			setIteratorProps(iterator,$);
+		}
+
 		var returnArray=[];
 		var itemStruct={};
 		var item='';
@@ -999,23 +1221,20 @@ component extends="mura.cfobject" {
 			if(len(pk)){
 				itemStruct.id=itemStruct[pk];
 			}
+			itemStruct.links=getLinks(item);
 
 			if(listFindNoCase('content,contentnav',arguments.entityName)){
 				itemStruct.images=setImageURLS(item,$);
 				itemStruct.url=item.getURL();
 			}
 
-			itemStruct.links=getLinks(item);
-
-			/*
-			var tokens=$.generateCSRFTokens(context=itemStruct.id);
-			structAppend(itemStruct,{csrf_token=tokens.token,csrf_token_expires='#tokens.expires#'});
-			*/
+			//var tokens=$.generateCSRFTokens(context=itemStruct.id);
+			//structAppend(itemStruct,{csrf_token=tokens.token,csrf_token_expires='#tokens.expires#'});
 
 			arrayAppend(returnArray, itemStruct );
 		}
 
-		return formatArray(returnArray);
+		return formatIteratorResult(iterator,returnArray,'findmany');
 	}
 
 	function findQuery(entityName,siteid){
@@ -1039,8 +1258,6 @@ component extends="mura.cfobject" {
 			}
 		}
 
-		setFeedProps(feed,$);
-
 		if($.event('entityName')=='content'){
 			var pk="contentid";
 		} else if($.event('entityName')=='feed'){
@@ -1049,22 +1266,39 @@ component extends="mura.cfobject" {
 			var pk=entity.getPrimaryKey();
 		}
 
+		if(entity.getEntityName()=='user'){
+			if(isNumeric($.event('isPublic'))){
+				feed.setIsPublic($.event('isPublic'));
+			} else {
+				feed.setIsPublic('all');
+			}
+		}
+
 		for(var p in url){
+			if(!(entity.getEntityName()=='user' && p=='isPublic')){
+				if(entity.getEnityName()=='user' && p=='groupid'){
+					feed.setGroupID(url[p]);
+				} else if(entity.valueExists(p)){
+					var condition="=";
 
-			if(entity.valueExists(p)){
-				var condition="=";
-
-				if(find('*',url[p])){
-					condition="like";
+					if(find('*',url[p])){
+						condition="like";
+					}
+					
+					feed.addParam(column=p,criteria=replace(url[p],'*','%','all'),condition=condition);
 				}
-
-				feed.addParam(column=p,criteria=replace(url[p],'*','%','all'),condition=condition);
 			}	
 		}
 
-		var iterator=feed.getIterator();
+		setFeedProps(feed,$);
 
-		//writeDump(var=iterator.getQUery(),abort=1);
+		if(isBoolean($.event('countOnly')) && $.event('countOnly')){
+			return {count=feed.getAvailableCount()};
+		} else {
+			var iterator=feed.getIterator();
+			setIteratorProps(iterator,$);
+		}
+
 		var returnArray=[];
 		var itemStruct={};
 		var item='';
@@ -1079,29 +1313,83 @@ component extends="mura.cfobject" {
 			if(len(pk)){
 				itemStruct.id=itemStruct[pk];
 			}
+			itemStruct.links=getLinks(item);
 
 			if(listFindNoCase('content,contentnav',arguments.entityName)){
 				itemStruct.images=setImageURLS(item,$);
 				itemStruct.url=item.getURL();
 			}
 
-			itemStruct.links=getLinks(item);
-
-			/*
-			var tokens=$.generateCSRFTokens(context=itemStruct.id);
-			structAppend(itemStruct,{csrf_token=tokens.token,csrf_token_expires='#tokens.expires#'});
-			*/
+			//var tokens=$.generateCSRFTokens(context=itemStruct.id);
+			//structAppend(itemStruct,{csrf_token=tokens.token,csrf_token_expires='#tokens.expires#'});
 
 			arrayAppend(returnArray, itemStruct );
 		}
 
-		return formatArray(returnArray);
+		//writeDump(var=$.event('pageIndex'),abort=1);
+
+		return formatIteratorResult(iterator,returnArray,'findquery');
 	}
 
 	function setFeedProps(feed,$){
+		var sort='';
+		
 		if(len($.event('orderby'))){
-			feed.setOrderBy($.event('orderby'));
+			sort=$.event('orderby');
 		}
+
+		if(len($.event('sort'))){
+			sort=$.event('sort');
+		}
+
+		if(len(sort)){
+			
+			var prefix='';
+			var prop='';
+			var useOrderby=true;
+
+			sort=listToArray(sort);
+			var orderby=[];
+			for(var s in sort){
+				if(len(s) > 1){
+					var prefix=left(s,1);
+					var prop=right(s,len(s)-1);
+
+					if(listFindNoCase(prop,'comments,random,rating')){
+						feed.setSortBy(prop);
+						if(prefix=='-'){
+							feed.setSortDirection('desc');
+						}
+						break;
+						useOrderby=false;
+					}
+
+					if(prefix=='+'){
+						arrayAppend(orderby,prop & " asc");
+					} else if(prefix=="-"){
+						arrayAppend(orderby,prop & " desc");
+					} else {
+						arrayAppend(orderby,s);
+					}
+				} else {
+
+					if(listFindNoCase(prop,'comments,random,rating')){
+						feed.setSortBy(s);
+						useOrderby=false;
+						break;
+					}
+
+					arrayAppend(orderby,s);
+				}
+
+  			}
+
+  			if(useOrderby){
+  				orderby=arrayToList(orderby);
+  				feed.setOrderBy(orderby);
+  			}
+  
+  		}
 
 		if(len($.event('sortby'))){
 			feed.setSortBy($.event('sortby'));
@@ -1111,25 +1399,45 @@ component extends="mura.cfobject" {
 			feed.setSortDirection($.event('sortdirection'));
 		}
 
-		if(len($.event('maxitems'))){
+		if(isNumeric($.event('maxitems'))){
 			feed.setMaxItems($.event('maxitems'));
 		}
 
-		if(len($.event('size'))){
+		if(isNumeric($.event('size'))){
 			feed.setMaxItems($.event('size'));
 		}
 
-		if(len($.event('limit'))){
+		if(isNumeric($.event('limit'))){
 			feed.setMaxItems($.event('limit'));
-		}
-
-		if(isNumeric($.event('isPublic'))){
-			feed.setIsPublic($.event('isPublic'));
 		}
 
 		if($.event('entityName')=='content' && len($.event('type'))){
 			feed.setType($.event('type'));
 		}
+
+		if(isNumeric($.event('cachedWithin'))){
+			feed.setCachedWithin(createTimeSpan(0,0,0,$.event('cachedWithin')));
+		}
+
+	}
+
+	function setIteratorProps(iterator,$){
+		if(isNumeric($.event('itemsPerPage'))){
+			iterator.setNextN($.event('itemsPerPage'));
+		}
+
+		if(isNumeric($.event('pageIndex'))){
+			iterator.setPage($.event('pageIndex'));
+		}
+
+		if(isNumeric($.event('startIndex'))){
+			iterator.setStartRow($.event('startIndex'));
+		}
+
+		if(isNumeric($.event('offset'))){
+			feed.setMaxItems($.event('offset'));
+		}
+
 	}
 
 	function findCrumbArray(entityName,id,siteid){
@@ -1160,27 +1468,24 @@ component extends="mura.cfobject" {
 		while(iterator.hasNext()){
 			item=iterator.next();
 			itemStruct=getFilteredValues(item,$,false);
-			
 			if(len(pk)){
 				itemStruct.id=itemStruct[pk];
 			}
+			itemStruct.links=getLinks(item);
 
 			if(listFindNoCase('content,contentnav',arguments.entityName)){
 				itemStruct.images=setImageURLS(item,$);
 				itemStruct.url=item.getURL();
 			}
 
-			itemStruct.links=getLinks(item);
-			
-			/*
-			var tokens=$.generateCSRFTokens(context=itemStruct.id);
-			structAppend(itemStruct,{csrf_token=tokens.token,csrf_token_expires='#tokens.expires#'});
-			*/
+			//var tokens=$.generateCSRFTokens(context=itemStruct.id);
+			//structAppend(itemStruct,{csrf_token=tokens.token,csrf_token_expires='#tokens.expires#'});
+
 			
 			arrayAppend(returnArray, itemStruct );
 		}
 
-		return formatArray(returnArray);
+		return formatIteratorResult(iterator,returnArray,'findCrumbArray');
 	}
 
 	function delete(entityName,id,siteid){
@@ -1188,27 +1493,35 @@ component extends="mura.cfobject" {
 		var $=getBean('$').init(arguments.siteid);
 
 		var entity=$.getBean(arguments.entityName);
-
-		if(!allowAction(entity,$)){
-			throw(type="authorization");
-		}
 		
 		if($.event('entityName')=='content'){
 			if(len($.event('contenthistid'))){
 				var loadparams={contenthistid=$.event('contenthistid')};
 				entity.loadBy(argumentCollection=loadparams);
 
-				if($.validateCSRFTokens(context=arguments.id)){
-					entity.deleteVersion();
+				if(entity.exists()){
+					if(!allowAction(entity,$)){
+						throw(type="authorization");
+					}
+
+					if($.validateCSRFTokens(context=arguments.id)){
+						entity.deleteVersion();
+					}
 				}
 			} else {
 				var loadparams={contentid=$.event('id')};
 				entity.loadBy(argumentCollection=loadparams);
 
-				if($.validateCSRFTokens(context=arguments.id)){
-					entity.delete();
-				} else {
-					throw(type="invalidTokens");
+				if(entity.exists()){
+					if(!allowAction(entity,$)){
+						throw(type="authorization");
+					}
+
+					if($.validateCSRFTokens(context=arguments.id)){
+						entity.delete();
+					} else {
+						throw(type="invalidTokens");
+					}
 				}
 			}
 			var pk="contentid";
@@ -1223,10 +1536,16 @@ component extends="mura.cfobject" {
 			var loadparams={'#pk#'=$.event('id')};
 			entity.loadBy(argumentCollection=loadparams);
 
-			if($.validateCSRFTokens(context=arguments.id)){
-				entity.delete();
-			} else {
-				throw(type="invalidTokens");
+			if(entity.exists()){
+				if(!allowAction(entity,$)){
+					throw(type="authorization");
+				}
+
+				if($.validateCSRFTokens(context=arguments.id)){
+					entity.delete();
+				} else {
+					throw(type="invalidTokens");
+				}
 			}
 		}
 		
@@ -1234,13 +1553,24 @@ component extends="mura.cfobject" {
 	}
 
 	function getEndPoint(){
+		if(request.muraApiRequest){
+			var configBean=getBean('configBean');
+			if(!isDefined('request.apiEndpoint')){
+				request.apiEndpoint="#getBean('utility').getRequestProtocol()#://#cgi.server_name##configBean.getServerPort()##configBean.getContext()#/index.cfm/_api/json/v1/#variables.siteid#";	
+			}
+			return request.apiEndpoint;
+		} 
+
 		return variables.endpoint;
+		
 	}
 
 	function getLinks(entity){
 		var links={};
 		var p='';
 		var baseURL=getEndPoint();
+
+		links['self']="#baseurl#?method=findOne&entityName=#entity.getEntityName()#&siteid=#entity.getSiteID()#&id=#entity.getvalue(entity.getPrimaryKey())#";	
 
 		if(arrayLen(entity.getHasManyPropArray())){
 			try{
@@ -1261,12 +1591,24 @@ component extends="mura.cfobject" {
 		}
 
 		if(listFindNoCase('feed,contentFeed',entity.getEntityName())){
-			links['feed']="#baseurl#method=findQuery&siteid=#entity.getSiteID()#&entityName=content&deedid=#entity.getFeedID()#";	
+			links['feed']="#baseurl#?method=findQuery&siteid=#entity.getSiteID()#&entityName=content&feedid=#entity.getFeedID()#";	
 		}
 
+		/*
+		if(listFindNoCase('user',entity.getEntityName())){
+			links['members']="#baseurl#?method=findQuery&siteid=#entity.getSiteID()#&entityName=user&groupid=#entity.getUserID()#";
+			//links['memberships']="#baseurl#?method=findQuery&siteid=#entity.getSiteID()#&entityName=user&groupid=#entity.getUserID()#";
+		}
+		*/
+
 		if(entity.getEntityName()=='content'){
+			links['self']="#baseurl#/_path/#entity.getFilename()#";
 			links['renderered']="#baseurl#/_path/#entity.getFilename()#";
-			links['crumbs']="#baseurl#?method=findCrumbArray&siteid=#entity.getSiteID()#&entityName=#entity.getEntityName()#&id=#entity.getValue('contentid')#";	
+			if(entity.getType()=='Variation'){
+				links['self']=links['renderered'];
+			} else {
+				links['crumbs']="#baseurl#?method=findCrumbArray&siteid=#entity.getSiteID()#&entityName=#entity.getEntityName()#&id=#entity.getValue('contentid')#";	
+			}
 			links['relatedcontent']="#baseurl#?method=findRelatedContent&siteid=#entity.getSiteID()#&entityName=#entity.getEntityName()#&id=#entity.getValue('contentid')#";
 		} else if(entity.getEntityName()=='category'){
 			links['crumbs']="#baseurl#?method=findCrumbArray&siteid=#entity.getSiteID()#&entityName=#entity.getEntityName()#&id=#entity.getValue('categoryid')#";	
@@ -1315,7 +1657,6 @@ component extends="mura.cfobject" {
 
 		var iterator=entity.getRelatedContentIterator(argumentCollection=args);
 
-		//writeDump(var=iterator.getQUery(),abort=1);
 		var returnArray=[];
 		var itemStruct={};
 		var item='';
@@ -1325,29 +1666,28 @@ component extends="mura.cfobject" {
 		var p='';
 		var pk=entity.getPrimaryKey();
 
+		setIteratorProps(iterator,$);
+
 		while(iterator.hasNext()){
 			item=iterator.next();
 			itemStruct=getFilteredValues(item,$,false);
 			if(len(pk)){
 				itemStruct.id=itemStruct[pk];
 			}
+			itemStruct.links=getLinks(item);
 
 			if(listFindNoCase('content,contentnav',arguments.entityName)){
 				itemStruct.images=setImageURLS(item,$);
 				itemStruct.url=item.getURL();
 			}
 
-			itemStruct.links=getLinks(item);
-
-			/*
-			var tokens=$.generateCSRFTokens(context=itemStruct.id);
-			structAppend(itemStruct,{csrf_token=tokens.token,csrf_token_expires='#tokens.expires#'});
-			*/
+			//var tokens=$.generateCSRFTokens(context=itemStruct.id);
+			//structAppend(itemStruct,{csrf_token=tokens.token,csrf_token_expires='#tokens.expires#'});
 
 			arrayAppend(returnArray, itemStruct );
 		}
 
-		return formatArray(returnArray);
+		return formatIteratorResult(iterator,returnArray,'findRelatedContent');
 	}
 
 	function applyRemoteFormat(str){
@@ -1356,7 +1696,7 @@ component extends="mura.cfobject" {
 		//arguments.str=replaceNoCase(str,'href="/','href="##/','all');
 		//arguments.str=replaceNoCase(str,"href='/","href=''##/",'all');
 	
-		return arguments.str;
+		return trim(arguments.str);
 	}
 
 	function setImageURLs(entity,$){
@@ -1366,8 +1706,6 @@ component extends="mura.cfobject" {
 				variables.images=arguments.$.siteConfig().getCustomImageSizeIterator();
 			}
 			
-			var cm=$.getBean('contentManager');
-
 			var returnStruct={
 				small=entity.getImageURL(size='small'),
 				medium=entity.getImageURL(size='medium'),
@@ -1380,6 +1718,7 @@ component extends="mura.cfobject" {
 				image=variables.images.next();
 				returnStruct['#image.getName()#']=entity.getImageURL(size=image.getName());
 			}
+			variables.images.reset();
 		} else {
 			var returnStruct={};
 		}
@@ -1388,10 +1727,18 @@ component extends="mura.cfobject" {
 
 	}
 
-	function validate(data={},validations={}) {
+	function validate(data='{}',validations='{}') {
 
 		data=deserializeJSON(urlDecode(arguments.data));
 		validations=deserializeJSON(urlDecode(arguments.validations));
+		
+		if(structIsEmpty(validations) && isDefined('data.entityname') && isDefined('data.siteid')){
+			var bean=getBean(data.entityname);
+			var args={'#bean.getPrimaryKey()#'=data[bean.getPrimaryKey()]
+			};
+			return bean.loadBy(argumentCollection=args).validate().getErrors();
+
+		}
 		
 		errors={};
 
@@ -1429,11 +1776,16 @@ component extends="mura.cfobject" {
 			}
 			
 		}
-		
+
 		request.siteid=arguments.siteid;
-		session.siteid=request.siteid;
 		request.servletEvent=new mura.servletEvent();
-		
+
+		if(isDefined('form.alttheme')){
+			request.alttheme=form.alttheme;
+		} else if (isDefined('url.alttheme')){
+			request.alttheme=url.alttheme;
+		}
+
 		var $=request.servletEvent.getValue("MuraScope");
 		
 		if(len($.event('filename'))){
@@ -1449,13 +1801,15 @@ component extends="mura.cfobject" {
 			$.event('currentFilename',$.content('filename'));
 			$.event('currentFilenameAdjusted',$.content('filename'));
 		}
-		
-		$.event('crumbdata',$.content().getCrumbArray());
+		 
+		$.announceEvent('siteAsyncRequestStart');
+		$.event('crumbdata',$.content().getCrumbArray(setInheritance=true));
 		$.event().getHandler('standardSetContentRenderer').handle($.event());
 		$.getContentRenderer().injectMethod('crumbdata',$.event("crumbdata"));
 		$.event().getHandler('standardSetPermissions').handle($.event());
 		$.event().getHandler('standardSetLocale').handle($.event());
-		//$.event().getHandler('standardMobile').handle($.event());
+
+		$.announceEvent('asyncRenderStart');
 
 		if($.event('object')=='comments'){
 			$.event().getHandler('standardSetCommentPermissions').handle($.event());
@@ -1467,48 +1821,72 @@ component extends="mura.cfobject" {
 
 		//Turn off cfformprotext js
 		request.cffpJS=true;
+		var result='';
 
 		switch($.event('object')){
 			case 'login':
-				if(getHTTPRequestData().method == 'POST' && len($.event('username')) && len($.event('password'))){
+				if(getHTTPRequestData().method == 'POST'){
+					var loginManager=getBean('loginManager');
 
-					if(getBean('loginManager').remoteLogin($.event().getAllValues(),'')){
-						if(len($.event('returnurl'))){
-							return {redirect=$.event('returnurl')};
+					if(isBoolean($.event('attemptChallenge')) && $.event('attemptChallenge')){
+						if(loginManager.handleChallengeAttempt($)){
+							loginManager.completedChallenge($);
+							result={redirect=request.muraJSONRedirectURL};
 						} else {
-							return {redirect="./##"};
+							$.event('status','challenge');
 						}
-					} else {
-						$.event('status','failed');
+					} else if(len($.event('username')) && len($.event('password'))){
+						if(loginManager.remoteLogin($.event().getAllValues(),'')){
+							if(len($.event('returnurl'))){
+								result={redirect=getBean('utility').sanitizeHREF($.event('returnurl'))};
+							} else {
+								result={redirect="./##"};
+							}
+						} else {
+							if(isDefined('session.mfa')){
+								$.event('status','challenge');
+							} else {
+								$.event('status','failed');
+							}
+						}
 					}
 				}
 
-				return {
-					html=applyRemoteFormat($.dspObject_Include(theFile='dsp_login.cfm'))
-				};
+				if(!isStruct(result)){
+					result={
+						html=applyRemoteFormat($.dspObject_Include(theFile='dsp_login.cfm'))
+					};
+				}
 
-			break;
+				break;
 
 			case 'calendar':
-				return {
+				result= {
 					html=applyRemoteFormat($.dspObject_Include(thefile="calendar/index.cfm"))
 				};
 
-			break;
+				break;
 
 			case 'search':
-				return {
+				result={
 					html=applyRemoteFormat($.dspObject_Include(thefile="dsp_search_results.cfm"))
 				};
 
-			break;
+				break;
 
 			case 'displayregion':
-				return {
+				result={
 					html=applyRemoteFormat($.dspObjects(argumentCollection=$.event().getAllValues()))
 				};
 
-			break;
+				break;
+
+			case 'folder':
+				result={
+					html=applyRemoteFormat($.dspObject_Include(thefile="dsp_folder.cfm"))
+				};
+
+				break;
 
 			case 'editprofile':
 				switch($.event('doaction')){
@@ -1543,9 +1921,9 @@ component extends="mura.cfobject" {
 									$.getBean('userUtility').loginByUserID(userid=$.event('userBean').getUserID(),siteid=$.event('userBean').getSiteID());
 
 									if(len($.event('returnurl'))){
-										return {redirect=$.event('returnurl')};
+										result={redirect=getBean('utility').sanitizeHREF($.event('returnurl'))};
 									} else {
-										return {redirect="./"};
+										result={redirect="./"};
 									}
 								}
 							}
@@ -1570,16 +1948,16 @@ component extends="mura.cfobject" {
 							
 							if(structIsEmpty($.event().getValue('userBean').getErrors()) && !$.event().valueExists('passwordNoCache')){
 								$.getBean('userManager').sendLoginByUser($.event().getValue('userBean'),$.event().getValue('siteid'),$.event().getValue('contentRenderer').getCurrentURL(),true);
-								return {redirect=$.event('returnurl')};
+								result={redirect=$.event('returnurl')};
 
 							} else if (structIsEmpty($.event().getValue('userBean').getErrors()) && $.event().valueExists('passwordNoCache') && $.event().getValue('userBean').getInactive() eq 0){
 								$.event().setValue('userID',$.event().getValue('userBean').getUserID());
 								$.getBean('userUtility').loginByUserID(userid=$.event('userid'),siteid=$.event('siteid'));
 
 								if(len($.event('returnurl'))){
-									return {redirect=$.event('returnurl')};
+									result={redirect=getBean('utility').sanitizeHREF($.event('returnurl'))};
 								} else {
-									return {redirect="./"};
+									result={redirect="./"};
 								}
 							}
 						}
@@ -1587,39 +1965,57 @@ component extends="mura.cfobject" {
 					break;
 				}
 
+				if(!isStruct(result)){
+					result={
+							html=applyRemoteFormat($.dspObject_Include(theFile='dsp_edit_profile.cfm'))
+						};
+				}
+
+				break;
+
+			default:
+				if(len($.event('objectparams2'))){
+					$.event('objectparams',$.event('objectparams2'));
+				}
+
+				//var logdata={object=$.event('object'),objectid=$.event('objectid'),siteid=arguments.siteid};
+				//writeLog(text=serializeJSON(logdata));
+				//return $.event('objectparams');
 				
-				return {
-						html=applyRemoteFormat($.dspObject_Include(theFile='dsp_edit_profile.cfm'))
+				var args={
+						object=$.event('object'),
+						objectid=$.event('objectid'),
+						siteid=arguments.siteid,
+						assignmentPerm=$.event('perm')
 					};
-			break;
 
-		}
-		
-		if(len($.event('objectparams2'))){
-			$.event('objectparams',$.event('objectparams2'));
-		}
+				if(len($.event('objectparams')) && !isJson($.event('objectparams'))){
+					args.params=urlDecode($.event('objectparams'));
+				} else {
+					args.params={};
+					
+					if(isDefined('url') && isStruct(url)){
+						for(var u in url){
+							if(!listFindNoCase('perm,contentid,contenthistid,object,objectid,siteid,nocache,instanceid',u)){
+								args.params['#u#']=url['#u#'];
+							}
+						}
+					}
+					
+				}
 
-		//var logdata={object=$.event('object'),objectid=$.event('objectid'),siteid=arguments.siteid};
-		//writeLog(text=serializeJSON(logdata));
-		//return $.event('objectparams');
-		
-		var args={
-				object=$.event('object'),
-				objectid=$.event('objectid'),
-				siteid=arguments.siteid
-			};
+				result=$.dspObject(argumentCollection=args);
+				
+				if(isSimpleValue(result)){
+					result={html=result};
+				}
+				
+				if(isdefined('request.muraJSONRedirectURL')){
+					result={redirect=request.muraJSONRedirectURL};
+				}
+		} 
 
-		if(len($.event('objectparams')) && !isJson($.event('objectparams'))){
-			args.params=urlDecode($.event('objectparams'));
-		}
-
-		var result={html=applyRemoteFormat($.dspObject(argumentCollection=args))};
-		
-		if(isdefined('request.muraJSONRedirectURL')){
-			return {redirect=request.muraJSONRedirectURL};
-		} else {
-			return result;
-		}
+		return result;
 	
 	}
 

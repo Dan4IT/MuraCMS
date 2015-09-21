@@ -53,7 +53,7 @@ version 2 without this exception.  You may, if you choose, apply this exception 
 <cfset variables.criteria="" />
 <cfset variables.orderBy="" />
 <cfset variables.isValid=true />
-<cfset variables.grouprelationships="(,and (,or (,),openGrouping,orOpenGrouping,andOpenGrouping,closeGrouping">
+<cfset variables.grouprelationships="(,and (,or (,),and not (,or not (,openGrouping,orOpenGrouping,andOpenGrouping,closeGrouping">
 
 <cffunction name="init" returntype="any" access="public">
 	<cfargument name="relationship" default="">
@@ -156,7 +156,7 @@ version 2 without this exception.  You may, if you choose, apply this exception 
  			<cfset variables.condition="<=" />
  		</cfcase>
  		<cfcase value="Begins,Contains,Like">
-	 		<cfif getDataType() eq "varchar">
+	 		<cfif listFindNoCase("varchar,longvarchar",getDataType()) >
 				<cfset variables.condition="like" />
 			<cfelse>
 				<cfset variables.condition="=" />
@@ -227,13 +227,13 @@ version 2 without this exception.  You may, if you choose, apply this exception 
 					<cfset tmp=lsParseDateTime(tmp)>
 					<cfcatch><!--- already parsed ---></cfcatch>
 				</cftry>
-				<cfset variables.criteria=createODBCDateTime(createDateTime(year(tmp),month(tmp),day(tmp),hour(tmp),minute(tmp),0)) />
+				<cfset variables.criteria=createODBCDateTime(tmp) />
 			<cfelseif isDate(tmp)>
 				<cftry>
 					<cfset tmp=parseDateTime(tmp)>
 					<cfcatch><!--- already parsed ---></cfcatch>
 				</cftry>
-				<cfset variables.criteria=createODBCDateTime(createDateTime(year(tmp),month(tmp),day(tmp),hour(tmp),minute(tmp),0)) />
+				<cfset variables.criteria=createODBCDateTime(tmp) />
 			<cfelse>
 				<cfset variables.criteria="" />
 				<cfset setIsValid(false) />
@@ -281,7 +281,7 @@ version 2 without this exception.  You may, if you choose, apply this exception 
 
 <cffunction name="getDataType">
 	<cfif not len(variables.dataType) and listlen(variables.field,".") eq 2>
-		<cfset variables.dataType=getBean("configBean").columnParamType(column=listLast(variables.field,"."),table=listFirst(variables.field,".")).dataType>
+		<cfset variables.dataType=getBean("dbUtility").columnParamType(column=listLast(variables.field,"."),table=listFirst(variables.field,"."))>
 	</cfif>
 	<cfreturn variables.dataType />
 </cffunction>

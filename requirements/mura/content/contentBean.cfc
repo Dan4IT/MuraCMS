@@ -475,6 +475,13 @@ version 2 without this exception.  You may, if you choose, apply this exception 
 		</cfif>
 		
 	</cfif>
+
+	<cfscript>
+		variables.instance.statusid = getStatusID();
+		variables.instance.status = getStatus();
+		variables.instance.ishome = getIsHome();
+		variables.instance.depth = getDepth();
+	</cfscript>
 	
 	<cfreturn this />
 </cffunction>
@@ -613,6 +620,9 @@ version 2 without this exception.  You may, if you choose, apply this exception 
 		<cfelseif variables.instance.Type eq "Component">
 			<cfset variables.instance.moduleID="00000000000000000000000000000000003">
 			<cfset variables.instance.ParentID="00000000000000000000000000000000003">
+		<cfelseif variables.instance.Type eq "Variation">
+			<cfset variables.instance.moduleID="00000000000000000000000000000000099">
+			<cfset variables.instance.ParentID="00000000000000000000000000000000099">
 		</cfif>
 	</cfif>
 	
@@ -953,7 +963,7 @@ version 2 without this exception.  You may, if you choose, apply this exception 
 </cffunction>
 
 <cffunction name="getRelatedContentQuery" returnType="query" output="false" access="public">
-	<cfargument name="liveOnly" type="boolean" required="yes" default="false" />
+	<cfargument name="liveOnly" type="boolean" required="yes" default="true" />
 	<cfargument name="today" type="date" required="yes" default="#now()#" />
 	<cfargument name="sortBy" type="string" default="orderno">
 	<cfargument name="sortDirection" type="string" default="asc">
@@ -966,7 +976,7 @@ version 2 without this exception.  You may, if you choose, apply this exception 
 </cffunction>
 
 <cffunction name="getRelatedContentIterator" returnType="any" output="false" access="public">
-	<cfargument name="liveOnly" type="boolean" required="yes" default="false" />
+	<cfargument name="liveOnly" type="boolean" required="yes" default="true" />
 	<cfargument name="today" type="date" required="yes" default="#now()#" />
 	<cfargument name="sortBy" type="string" default="orderno" >
 	<cfargument name="sortDirection" type="string" default="asc">
@@ -1153,7 +1163,11 @@ version 2 without this exception.  You may, if you choose, apply this exception 
 <cffunction name="getCrumbArray" output="false" returntype="any">
 	<cfargument name="sort" required="true" default="asc">
 	<cfargument name="setInheritance" required="true" type="boolean" default="false">
-	<cfreturn variables.contentManager.getCrumbList(contentID=getContentID(), siteID=variables.instance.siteID, setInheritance=arguments.setInheritance, path=variables.instance.path, sort=arguments.sort)>
+	<cfif getValue('isNew') and getValue('contentid') neq '00000000000000000000000000000000001'>
+		<cfreturn variables.contentManager.getCrumbList(contentID=variables.instance.parentid, siteID=variables.instance.siteID, setInheritance=arguments.setInheritance, sort=arguments.sort)>
+	<cfelse>
+		<cfreturn variables.contentManager.getCrumbList(contentID=getContentID(), siteID=variables.instance.siteID, setInheritance=arguments.setInheritance, path=variables.instance.path, sort=arguments.sort)>
+	</cfif>
 </cffunction>
 
 <cffunction name="getCrumbIterator" output="false" returntype="any">
@@ -1207,7 +1221,7 @@ version 2 without this exception.  You may, if you choose, apply this exception 
 		<cfset arguments.compactDisplay=true>
 	</cfif>
 	
-	<cfset returnStr= "#variables.configBean.getContext()#/admin/?muraAction=cArch.edit&contentHistId=#getContentHistId()#&contentId=#getContentId()#&Type=#variables.instance.type#&siteId=#variables.instance.siteID#&topId=#topID#&parentId=#variables.instance.parentID#&moduleId=#variables.instance.moduleID#&compactDisplay=#arguments.compactdisplay#" >
+	<cfset returnStr= "#variables.configBean.getAdminPath()#/?muraAction=cArch.edit&contentHistId=#getContentHistId()#&contentId=#getContentId()#&Type=#variables.instance.type#&siteId=#variables.instance.siteID#&topId=#topID#&parentId=#variables.instance.parentID#&moduleId=#variables.instance.moduleID#&compactDisplay=#arguments.compactdisplay#" >
 	
 	<cfif structKeyExists(arguments,"tab")>
 		<cfset returnStr=returnStr & "##" & arguments.tab>
@@ -1400,8 +1414,14 @@ version 2 without this exception.  You may, if you choose, apply this exception 
 		<cfreturn status />
 	</cffunction>
 
-	<cffunction name="getIsHome" output="false" returntype="boolean">
-		<cfreturn Right(variables.instance.parentid, 3) eq 'end' />
-	</cffunction>
+	<cfscript>
+		public boolean function getIsHome() {
+			return Right(variables.instance.parentid, 3) == 'end';
+		}
+
+		public numeric function getDepth() {
+			return ListLen(variables.instance.path) - 1;
+		}
+	</cfscript>
 
 </cfcomponent>

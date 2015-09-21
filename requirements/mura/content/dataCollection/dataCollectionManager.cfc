@@ -93,7 +93,9 @@ version 2 without this exception.  You may, if you choose, apply this exception 
 	<cfelse>
 		<cfset responseid=createuuid()>
 		<cfset fieldlist=arguments.data.fieldnames>
-	</cfif> 
+	</cfif>
+
+	<cfset info['responseid'] = responseid />
 	
 	<cfloop list="#fieldlist#" index="f">
 	<cfif Not ListFindNoCase(ignoreList, f)>
@@ -316,7 +318,7 @@ order by tformresponsepackets.entered asc
 		frm.attr('method','post');
 
 		if(frm.attr('onsubmit') == undefined){
-			frm.on('submit',function(){return mura.validateForm(this);})
+			frm.on('submit',function(){return validateForm(this);})
 		}
 		<cfif arguments.responseChart>
 			var polllist=new Array();

@@ -54,7 +54,7 @@
 	may, if you choose, apply this exception to your own modified versions of 
 	Mura CMS.
 --->
-<cfif request.muraFrontEndRequest>
+<cfif request.muraFrontEndRequest and this.asyncObjects>
 	<cfoutput>
 		<div class="mura-async-object" 
 			data-object="editprofile" 
@@ -163,7 +163,7 @@
 								<ins>(#HTMLEditFormat(variables.$.rbKey('user.required'))#)</ins>
 							</label>
 							<div class="#this.editProfileFormFieldsWrapperClass#">
-								<input class="#this.editProfileFormFieldsClass#" type="password" name="passwordNoCache" id="passwordtxt" data-validate="match" matchfield="password2" value=""  maxlength="50" data-required="true" placeholder="#variables.$.rbKey('user.password')#" data-message="#HTMLEditFormat(variables.$.rbKey('user.passwordvalidate'))#" />
+								<input class="#this.editProfileFormFieldsClass#" type="password" name="passwordNoCache" id="passwordtxt" data-validate="match" matchfield="password2" value=""  maxlength="50" <cfif not session.mura.isloggedin>data-required="true"</cfif> placeholder="#variables.$.rbKey('user.password')#" data-message="#HTMLEditFormat(variables.$.rbKey('user.passwordvalidate'))#" />
 							</div>
 						</div>
 
@@ -174,7 +174,7 @@
 								<ins>(#HTMLEditFormat(variables.$.rbKey('user.required'))#)</ins>
 							</label>
 							<div class="#this.editProfileFormFieldsWrapperClass#">
-								<input class="#this.editProfileFormFieldsClass#" type="password" name="password2" id="password2txt" value=""  maxlength="50" data-required="true" placeholder="#variables.$.rbKey('user.passwordconfirm')#" data-message="#HTMLEditFormat(variables.$.rbKey('user.passwordconfirmrequired'))#" />
+								<input class="#this.editProfileFormFieldsClass#" type="password" name="password2" id="password2txt" value=""  maxlength="50" <cfif not session.mura.isloggedin>data-required="true"</cfif> placeholder="#variables.$.rbKey('user.passwordconfirm')#" data-message="#HTMLEditFormat(variables.$.rbKey('user.passwordconfirmrequired'))#" />
 							</div>
 						</div>
 
@@ -291,7 +291,7 @@
 					<!--- form protection --->
 					<div class="#this.editProfileFormGroupWrapperClass#">
 						<div class="#this.editProfileSubmitButtonWrapperClass#">
-							<cfinclude template="dsp_form_protect.cfm"/>
+							#variables.$.dspObject_include(thefile='dsp_form_protect.cfm')#
 						</div>
 					</div>
 
@@ -314,7 +314,6 @@
 							<input type="hidden" name="siteid" value="#HTMLEditFormat(variables.$.event('siteID'))#">
 							<input type="hidden" name="returnURL" value="#HTMLEditFormat(request.returnURL)#">
 							<input type="hidden" name="display" value="editprofile">
-							<!--- <cfinclude template="dsp_form_protect.cfm"/> --->
 						</div>
 					</div>
 				</form>

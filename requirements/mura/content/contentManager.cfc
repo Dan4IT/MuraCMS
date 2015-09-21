@@ -47,6 +47,8 @@ version 2 without this exception.  You may, if you choose, apply this exception 
 <cfcomponent extends="mura.cfobject" output="false">
 	<cfset this.TreeLevelList="Page,Folder,Calendar,Link,File,Gallery">
 	<cfset this.ExtendableList="Page,Folder,Calendar,Link,File,Gallery,Component,Form">
+	<cfset this.HTMLBodyList="Form,Gallery,Calendar,Component,Page,Folder">
+	<cfset this.ValidContentTypeList="Page,Folder,Calendar,Link,File,Gallery,Component,Form,Variation">
 	<cfset this.versionObjects="">
 
 	<cffunction name="init" access="public" returntype="any" output="false">
@@ -133,10 +135,12 @@ version 2 without this exception.  You may, if you choose, apply this exception 
 			<cfcase value="00000000000000000000000000000000011,00000000000000000000000000000000012,00000000000000000000000000000000013" delimiters=",">
 				<cfset rs=variables.contentGateway.getNest(data.topid,data.siteid,data.sortBy,data.sortDirection,data.searchString) />
 			</cfcase>
-			<cfcase value="00000000000000000000000000000000003,00000000000000000000000000000000004">
+			<cfcase value="00000000000000000000000000000000003,00000000000000000000000000000000004,00000000000000000000000000000000099">
 				<cfset feed=getBean('feed')>
 				<cfif data.moduleID eq "00000000000000000000000000000000003">
 					<cfset feed.setType('Component')>
+				<cfelseif data.moduleID eq "00000000000000000000000000000000099">
+					<cfset feed.setType('Variation')>
 				<cfelse>
 					<cfset feed.setType('Form')>
 				</cfif>
@@ -782,7 +786,7 @@ version 2 without this exception.  You may, if you choose, apply this exception 
 			<cfif len(arguments.currentPath)>
 				<cfquery>
 					update tcontent
-					set path=replace(ltrim(rtrim(cast(path AS char(1000)))),<cfqueryparam cfsqltype="cf_sql_longvarchar" value="#arguments.currentPath#">,<cfqueryparam cfsqltype="cf_sql_longvarchar" value="#arguments.newPath#">)
+					set path=replace(ltrim(rtrim(cast(path AS char(2000)))),<cfqueryparam cfsqltype="cf_sql_longvarchar" value="#arguments.currentPath#">,<cfqueryparam cfsqltype="cf_sql_longvarchar" value="#arguments.newPath#">)
 					where path like	<cfqueryparam cfsqltype="cf_sql_longvarchar" value="#arguments.currentPath#%">
 					and siteID=<cfqueryparam cfsqltype="cf_sql_varchar" value="#arguments.siteID#">
 				</cfquery>
@@ -855,7 +859,7 @@ version 2 without this exception.  You may, if you choose, apply this exception 
 			<cfthrow type="custom" message="The attribute 'PARENTID' is required when saving content.">
 		</cfif>
 
-		<cfif not structKeyExists(arguments.data,"type") or (structKeyExists(arguments.data,"type") and not listFindNoCase("Form,Component,Page,Folder,Gallery,Calendar,File,Link",arguments.data.type))>
+		<cfif not structKeyExists(arguments.data,"type") or (structKeyExists(arguments.data,"type") and not listFindNoCase(this.ValidContentTypeList,arguments.data.type))>
 			<cfthrow type="custom" message="A valid 'TYPE' is required when saving content.">
 		</cfif>
 
@@ -974,7 +978,7 @@ version 2 without this exception.  You may, if you choose, apply this exception 
 
 			<!--- END CONTENT TYPE: ALL CONTENT TYPES --->
 
-			<cfif variables.fileManager.requestHasRestrictedFiles()>
+			<cfif variables.fileManager.requestHasRestrictedFiles(scope=newBean.getAllValues())>
 				<cfset errors=newBean.getErrors()>
 				<cfset errors.requestHasRestrictedFiles=variables.settingsManager.getSite(newBean.getSiteID()).getRBFactory().getKey('sitemanager.requestHasRestrictedFiles')>
 			</cfif>
@@ -1230,13 +1234,14 @@ version 2 without this exception.  You may, if you choose, apply this exception 
 
 				<cfif newBean.getapproved() or newBean.getIsNew()>
 					<!--- BEGIN CONTENT TYPE: COMPONENT, FORM --->
-					<cfif listFindNoCase("Component,Form",newBean.getType())>
+					<cfif listFindNoCase("Component,Form,Variation",newBean.getType())>
 						<!---
 						<cfset getBean('contentUtility').setUniqueTitle(newBean) />
 						--->
 						<cfset newBean.setMenuTitle(newBean.getTitle())>
 						<cfset newBean.setHTMLTitle(newBean.getTitle())>
 						<cfset newBean.setURLTitle(newBean.getTitle())>
+						<cfset newBean.setIsNav(1)>
 					</cfif>
 				<!--- END CONTENT TYPE: COMPONENT, FORM --->
 				</cfif>
@@ -1919,7 +1924,7 @@ version 2 without this exception.  You may, if you choose, apply this exception 
 	<cffunction name="getCategorySummary" returntype="query" access="public" output="false">
 		<cfargument name="siteID" type="string" required="true" />
 		<cfset var rs = ''>
-		<cfset rs = variables.contentGateway.geCategorySummary(arguments.siteID)>
+		<cfset rs = variables.contentGateway.getCategorySummary(arguments.siteID)>
 		<cfreturn rs />
 	</cffunction>
 
@@ -1991,7 +1996,7 @@ version 2 without this exception.  You may, if you choose, apply this exception 
 	<cffunction name="getRelatedContent" returntype="query" access="public" output="false">
 		<cfargument name="siteID"  type="string" />
 		<cfargument name="contentHistID"  type="string" />
-		<cfargument name="liveOnly" type="boolean" required="yes" default="false" />
+		<cfargument name="liveOnly" type="boolean" required="yes" default="true" />
 		<cfargument name="today" type="date" required="yes" default="#now()#" />
 		<cfargument name="sortBy" type="string" default="orderno" >
 		<cfargument name="sortDirection" type="string" default="asc" >
@@ -2007,7 +2012,7 @@ version 2 without this exception.  You may, if you choose, apply this exception 
 	<cffunction name="getRelatedContentIterator" returntype="any" access="public" output="false">
 		<cfargument name="siteID"  type="string" />
 		<cfargument name="contentHistID"  type="string" />
-		<cfargument name="liveOnly" type="boolean" required="yes" default="false" />
+		<cfargument name="liveOnly" type="boolean" required="yes" default="true" />
 		<cfargument name="today" type="date" required="yes" default="#now()#" />
 		<cfargument name="sortBy" type="string" default="orderno" >
 		<cfargument name="sortDirection" type="string" default="asc" >

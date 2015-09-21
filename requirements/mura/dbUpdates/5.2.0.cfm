@@ -132,7 +132,7 @@ select * from tcontentcomments  where 0=1
 	<cftry>
 		<cfquery>
 		CREATE TABLE IF NOT EXISTS  `tuserremotesessions` (
-		  `userID` char(35) default NULL,
+		  `userID` char(35) NOT NULL,
 		  `authToken` char(32) default NULL,
 		  `data` text,
 		  `created` datetime default NULL,
@@ -202,7 +202,7 @@ select * from tcontentcomments  where 0=1
 	
 		<cfquery>
 		CREATE TABLE tuserremotesessions (
-		  userID char(35) default NULL,
+		  userID char(35) NOT NULL,
 		  authToken char(32) default NULL,
 		  data clob,
 		  created timestamp default NULL,
@@ -401,7 +401,7 @@ ALTER TABLE tsettings ADD cacheFreeMemoryThreshold NUMBER(10,0)
 	<cfif variables.RUNDBUPDATE>
 		<cfquery>
 		CREATE TABLE tuserstrikes (
-		  username varchar(100) default NULL,
+		  username varchar(100) NOT NULL,
 		  strikes integer default NULL,
 		  lastAttempt datetime NOT NULL,
 		  PRIMARY KEY  (username)

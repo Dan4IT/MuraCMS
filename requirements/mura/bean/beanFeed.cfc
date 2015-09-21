@@ -54,8 +54,10 @@ version 2 without this exception.  You may, if you choose, apply this exception 
 	<cfproperty name="siteID" type="string" default="" />
 	<cfproperty name="sortBy" type="string" default="" />
 	<cfproperty name="sortDirection" type="string" default="asc" required="true" />
+	<cfproperty name="orderby" type="string" default=""/>
 	<cfproperty name="additionalColumns" type="string" default="" />
 	<cfproperty name="sortTable" type="string" default="" />
+	<cfproperty name="pageIndex" type="numeric" default="1" />
 	
 <cffunction name="init" output="false">
 	
@@ -74,13 +76,16 @@ version 2 without this exception.  You may, if you choose, apply this exception 
 	<cfset variables.instance.keyField="">
 	<cfset variables.instance.sortBy="" />
 	<cfset variables.instance.sortDirection="asc" />
+	<cfset variables.instance.orderby="" />
 	<cfset variables.instance.tableFieldLookUp=structNew()/>
 	<cfset variables.instance.tableFieldlist=""/>
 	<cfset variables.instance.nextN=0>
 	<cfset variables.instance.maxItems=0>
+	<cfset variables.instance.pageIndex=1>
 	<cfset variables.instance.additionalColumns=""/>
 	<cfset variables.instance.sortTable=""/>
-	<cfset variables.instance.orderby=""/>
+	<cfset variables.instance.fieldAliases={}/>
+	<cfset variables.instance.cachedWithin=createTimeSpan(0,0,0,0)/>
 	
 	<cfset variables.instance.params=queryNew("param,relationship,field,condition,criteria,dataType","integer,varchar,varchar,varchar,varchar,varchar" )  />
 	<cfset variables.instance.joins=arrayNew(1)  />
@@ -95,6 +100,44 @@ version 2 without this exception.  You may, if you choose, apply this exception 
 	<cfargument name="entityName">
 	<cfset variables.instance.entityName=arguments.entityName>
 	<cfreturn this>
+</cffunction>
+
+<cffunction name="getOrderBy" output="false">
+	<cfreturn variables.instance.orderby>
+</cffunction>
+
+<cffunction name="setOrderBy" output="false">
+	<cfargument name="orderby">
+	<cfset variables.instance.orderby=arguments.orderby>
+	<cfreturn this>
+</cffunction>
+
+<cffunction name="getSort" output="false">
+	<cfreturn variables.instance.orderby>
+</cffunction>
+
+<cffunction name="setSort" output="false">
+	<cfargument name="sort">
+	<cfset setOrderBy(orderby=arguments.sort)>
+	<cfreturn this>
+</cffunction>
+
+<cffunction name="setSortDirection" access="public" output="false">
+	<cfargument name="sortDirection" type="any" />
+	<cfif listFindNoCase('desc,asc',arguments.sortDirection)>
+	<cfset variables.instance.sortDirection = arguments.sortDirection />
+	</cfif>
+	<cfreturn this>
+</cffunction>
+
+<cffunction name="setItemsPerPage" access="public" output="false">
+	<cfargument name="itemsPerPage">
+	<cfset setNextN(nextN=arguments.itemsPerPage)>
+	<cfreturn this>
+</cffunction>
+
+<cffunction name="getItemsPerPage" output="false">
+	<cfreturn variables.instance.NextN>
 </cffunction>
 
 <cffunction name="setNextN" access="public" output="false">
@@ -220,6 +263,15 @@ version 2 without this exception.  You may, if you choose, apply this exception 
 		<cfif structKeyExists(arguments,'column')>
 			<cfset arguments.field=arguments.column>
 		</cfif>
+
+		<cfif structKeyExists(arguments,'name')>
+			<cfset arguments.field=arguments.name>
+		</cfif>
+
+		<cfif structKeyExists(variables.instance.fieldAliases,arguments.field)>
+			<cfset arguments.datatype=variables.instance.fieldAliases[arguments.field].datatype>
+			<cfset arguments.field=variables.instance.fieldAliases[arguments.field].field>
+		</cfif>
 		
 		<cfif not len(arguments.dataType)>
 			<cfset loadTableMetaData()>
@@ -339,25 +391,20 @@ version 2 without this exception.  You may, if you choose, apply this exception 
 </cffunction>
 
 <cffunction name="getQueryAttrs" output="false">
-	<cfif hasCustomDatasource()>
-		<cfset structAppend(arguments,
-			{datasource=getCustomDatasource(),
-			username='',
-			password=''},
-			false)>
-		<cfreturn arguments>
-	<cfelse>
-		<cfreturn variables.configBean.getReadOnlyQRYAttrs(argumentCollection=arguments)>
-	</cfif>
+	<cfargument name="cachedWithin" default="#variables.instance.cachedWithin#">
+	<cfset arguments.readOnly=true>
+	<cfreturn super.getQueryAttrs(argumentCollection=arguments)>
 </cffunction>
 
 <cffunction name="getQueryService" output="false">
-	<cfreturn new Query(argumentCollection=getQueryAttrs(argumentCollection=arguments))>
+	<cfargument name="cachedWithin" default="#variables.instance.cachedWithin#">
+	<cfset arguments.readOnly=true>
+	<cfreturn super.getQueryService(argumentCollection=arguments)>
 </cffunction>
-
 
 <cffunction name="getQuery" returntype="query" output="false">
 	<cfargument name="countOnly" default="false">
+	<cfargument name="cachedWithin" default="#variables.instance.cachedWithin#">
 
 	<cfset var rs="">
 	<cfset var isListParam=false>
@@ -381,7 +428,7 @@ version 2 without this exception.  You may, if you choose, apply this exception 
 		</cfif>
 	</cfloop>
 
-	<cfquery attributeCollection="#getQueryAttrs(name='rs')#">
+	<cfquery attributeCollection="#getQueryAttrs(name='rs',cachedWithin=arguments.cachedWithin)#">
 		<cfif not arguments.countOnly and dbType eq "oracle" and variables.instance.maxItems>select * from (</cfif>
 		select <cfif not arguments.countOnly and dbtype eq "mssql" and variables.instance.maxItems>top #val(variables.instance.maxItems)#</cfif>
 		
@@ -444,6 +491,12 @@ version 2 without this exception.  You may, if you choose, apply this exception 
 				<cfelseif listFindNoCase("andOpenGrouping,and (",param.getRelationship())>
 					<cfif not openGrouping>and</cfif> (
 					<cfset openGrouping=true />
+				<cfelseif listFindNoCase("and not (",param.getRelationship())>
+					<cfif not openGrouping>and</cfif> not (
+					<cfset openGrouping=true />
+				<cfelseif listFindNoCase("or not (",param.getRelationship())>
+				 	<cfif not openGrouping>or</cfif> not (
+					<cfset openGrouping=true />
 				<cfelseif listFindNoCase("closeGrouping,)",param.getRelationship())>
 					)
 					<cfset openGrouping=false />
@@ -454,9 +507,15 @@ version 2 without this exception.  You may, if you choose, apply this exception 
 				<cfset started = true />
 
 				<cfset isListParam=listFindNoCase("IN,NOT IN",param.getCondition())>					
-				#param.getFieldStatement()# #param.getCondition()# <cfif isListParam>(</cfif><cfqueryparam cfsqltype="cf_sql_#param.getDataType()#" value="#param.getCriteria()#" list="#iif(isListParam,de('true'),de('false'))#" null="#iif(param.getCriteria() eq 'null',de('true'),de('false'))#"><cfif isListParam>)</cfif>  	
-				
-				<cfset openGrouping=false />
+				<cfif len(param.getField())>
+					#param.getFieldStatement()# 
+					<cfif param.getCriteria() eq 'null'>
+						IS NULL
+					<cfelse>
+						#param.getCondition()# <cfif isListParam>(</cfif><cfqueryparam cfsqltype="cf_sql_#param.getDataType()#" value="#param.getCriteria()#" list="#iif(isListParam,de('true'),de('false'))#" null="#iif(param.getCriteria() eq 'null',de('true'),de('false'))#"><cfif isListParam>)</cfif>  	
+					</cfif>
+					<cfset openGrouping=false />
+				</cfif>
 			</cfif>						
 		</cfloop>
 		<cfif started>)</cfif>
@@ -494,7 +553,8 @@ version 2 without this exception.  You may, if you choose, apply this exception 
 </cffunction>
 
 <cffunction name="getIterator" returntype="any" output="false">
-	<cfset var rs=getQuery()>
+	<cfargument name="cachedWithin" default="#variables.instance.cachedWithin#">
+	<cfset var rs=getQuery(argumentCollection=arguments)>
 	<cfset var it=''>
 
 	<cfif getServiceFactory().containsBean("#variables.instance.entityName#Iterator")>
@@ -504,21 +564,47 @@ version 2 without this exception.  You may, if you choose, apply this exception 
 	</cfif>
 
 	<cfset it.setEntityName(getValue('entityName'))>
-
-	<cfset it.setQuery(rs,variables.instance.nextN)>
+	<cfset it.setQuery(rs)>
+	<cfset it.setFeed('feed',this)>
+	<cfset it.setPageIndex(getValue('pageIndex'))>
+	<cfset it.setItemsPerPage(getItemsPerPage())>
+	
 	<cfreturn it>
-</cffunction>
-
-<cffunction name="setSortDirection" access="public" output="false">
-	<cfargument name="sortDirection" type="any" />
-	<cfif listFindNoCase('desc,asc',arguments.sortDirection)>
-	<cfset variables.instance.sortDirection = arguments.sortDirection />
-	</cfif>
-	<cfreturn this>
 </cffunction>
 
 <cffunction name="getAvailableCount" output="false">
 	<cfreturn getQuery(countOnly=true).count>
 </cffunction>
+
+<cffunction name="clone" output="false">
+	<cfreturn getBean("beanFeed").setAllValues(structCopy(getAllValues()))>
+</cffunction>
+
+<!---
+<cffunction name="sanitizedValue" output="false">
+	<cfargument name="property">
+	<cfreturn REReplace(getValue(arguments.property),"[^0-9A-Za-z\._,\- ]","","all")>
+</cffunction>
+
+<cffunction name="getOffset" output="false">
+	<cfreturn (getValue('pageIndex')-1) * getValue('nextN')>
+</cffunction>
+
+<cffunction name="getFetch" output="false">
+	<cfreturn getValue('nextN')>
+</cffunction>
+
+<cffunction name="getStartRow" output="false">
+	<cfreturn getOffset() +1>
+</cffunction>
+
+<cffunction name="getEndRow" output="false">
+	<cfset var endrow=getOffset()+getValue('nextN')>
+	<cfif endrow gt getValue('maxItems')>
+		<cfset endrow=getValue('maxItems')>
+	</cfif>
+	<cfreturn endrow>
+</cffunction>
+--->
 
 </cfcomponent>

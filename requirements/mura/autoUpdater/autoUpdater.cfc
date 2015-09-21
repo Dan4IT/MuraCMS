@@ -70,7 +70,7 @@ version 2 without this exception.  You may, if you choose, apply this exception 
 <cfset var fileItem="">
 <cfset var currentDir=GetDirectoryFromPath(getCurrentTemplatePath())>
 <cfset var diff="">
-<cfset var returnStruct=structNew()>
+<cfset var returnStruct={currentVersion=currentVersion,files=[]}>
 <cfset var updatedArray=arrayNew(1)>
 <cfset var destination="">
 <cfset var autoUpdateSleep=variables.configBean.getValue("autoUpdateSleep")>
@@ -90,25 +90,18 @@ version 2 without this exception.  You may, if you choose, apply this exception 
 			<cfset versionDir=versionDir & "/config">
 		</cfif>
 		
-		<cfif len(variables.configBean.getProxyServer())>
-			<cfhttp url="http://webservices.getmura.com/mura/changeset" result="diff" getasbinary="yes" 
-			proxyUser="#variables.configBean.getProxyUser()#" proxyPassword="#variables.configBean.getProxyPassword()#"
-			proxyServer="#variables.configBean.getProxyServer()#" proxyPort="#variables.configBean.getProxyPort()#">
-			<cfhttpparam type="url" name="format" value="zip">
-			<cfhttpparam type="url" name="old_path" value="#svnUpdateDir#">
-			<cfhttpparam type="url" name="old" value="#currentVersion#">
-			<cfhttpparam type="url" name="new_path" value="#svnUpdateDir#">
-			<cfhttpparam type="url" name="new" value="#updateVersion#">
-			</cfhttp>
-		<cfelse>
-			<cfhttp url="http://webservices.getmura.com/mura/changeset" result="diff" getasbinary="yes">
+	
+		<cfhttp attributeCollection='#getHTTPAttrs(
+				url="http://webservices.getmura.com/mura/changeset",
+				result="diff",
+				getasbinary="yes")#'>
 			<cfhttpparam type="url" name="format" value="zip">
 			<cfhttpparam type="url" name="old_path" value="#svnUpdateDir#">
 			<cfhttpparam type="url" name="old" value="#currentVersion#">
 			<cfhttpparam type="url" name="new_path" value="#svnUpdateDir#">
 			<cfhttpparam type="url" name="new" value="#updateVersion#">
 		</cfhttp>
-		</cfif>
+
 		<cfif not IsBinary(diff.filecontent)>
 			<cfthrow message="The current production version code is currently not available. Please try again later.">
 		</cfif>
@@ -162,7 +155,6 @@ version 2 without this exception.  You may, if you choose, apply this exception 
 			<cfelse>
 				<cfquery name="rs" dbType="query">
 				select * from rs where entry not like 'trunk#variables.fileDelim#www#variables.fileDelim#default%'
-				and entry != 'trunk#variables.fileDelim#www#variables.fileDelim#index.cfm'
 				</cfquery>
 				
 				<cfloop query="rs">
@@ -188,29 +180,36 @@ version 2 without this exception.  You may, if you choose, apply this exception 
 						<cfset arrayAppend(updatedArray,"#destination##listLast(rs.entry,variables.fileDelim)#")>
 					</cfif>
 				</cfloop>
-				<cfset application.appInitialized=false>
-				<cfset application.appAutoUpdated=true>
-				<cfset application.coreversion=updateVersion>
 
-				<cfif isNumeric(autoUpdateSleep) and autoUpdateSleep>
-					<cfset autoUpdateSleep=autoUpdateSleep*1000>
-					<cfthread action="sleep" duration="#autoUpdateSleep#"></cfthread>
+				<cfif arrayLen(updatedArray)>
+					<cfset application.appInitialized=false>
+					<cfset application.appAutoUpdated=true>
+					<cfset application.coreversion=updateVersion>
+
+					<cfif isNumeric(autoUpdateSleep) and autoUpdateSleep>
+						<cfset autoUpdateSleep=autoUpdateSleep*1000>
+						<cfthread action="sleep" duration="#autoUpdateSleep#"></cfthread>
+					</cfif>
 				</cfif>
-
+	
 			</cfif>
 			<cfdirectory action="delete" directory="#currentDir##zipFileName#" recurse="true">
 		</cfif>
 		
 		<cffile action="delete" file="#currentDir##zipFileName#.zip" >
-		<cfset variables.fileWriter.writeFile(file="#versionDir##variables.fileDelim#version.cfm",output="<cfabort>:#updateVersion#")>
+		<cfif arrayLen(updatedArray)>	
+			<cfset variables.fileWriter.writeFile(file="#versionDir##variables.fileDelim#version.cfm",output="<cfabort>:#updateVersion#")>
+		</cfif>
 		</cflock>
 	</cfif>
-	
-	<cfset returnStruct.currentVersion=updateVersion/>
-	<cfset returnStruct.files=updatedArray>
 
-	<cfif server.ColdFusion.ProductName neq "Coldfusion Server">
-		<cfscript>pagePoolClear();</cfscript>
+	<cfif arrayLen(updatedArray)>	
+		<cfset returnStruct.currentVersion=updateVersion/>
+		<cfset returnStruct.files=updatedArray>
+
+		<cfif server.ColdFusion.ProductName neq "Coldfusion Server">
+			<cfscript>pagePoolClear();</cfscript>
+		</cfif>
 	</cfif>
 
 	<cfreturn returnStruct>
@@ -268,13 +267,8 @@ version 2 without this exception.  You may, if you choose, apply this exception 
 	<cfargument name="siteid" default="">
 	<cfset var diff="">
 
-	<cfif len(variables.configBean.getProxyServer())>
-		<cfhttp url="http://getmura.com/productionVersion.cfm?cfversion=#application.CFVersion#&muraversion=#getCurrentVersion(arguments.siteID)#" result="diff" getasbinary="no" 
-		proxyUser="#variables.configBean.getProxyUser()#" proxyPassword="#variables.configBean.getProxyPassword()#"
-		proxyServer="#variables.configBean.getProxyServer()#" proxyPort="#variables.configBean.getProxyPort()#">
-	<cfelse>
-		<cfhttp url="http://getmura.com/productionVersion.cfm?cfversion=#application.CFVersion#&muraversion=#getCurrentVersion(arguments.siteID)#" result="diff" getasbinary="no">
-	</cfif>
+	<cfhttp attributeCollection='#getHTTPAttrs(url="http://getmura.com/productionVersion.cfm?cfversion=#application.CFVersion#&muraversion=#getCurrentVersion(arguments.siteID)#",result="diff",getasbinary="no")#'>
+	
 	<cftry>
 	<cfreturn createObject("component","mura.json").decode(diff.filecontent)>
 	<cfcatch>
